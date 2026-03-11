@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Upload, ArrowRight, Sparkles } from 'lucide-react';
 import { IncidentType, IncidentSeverity } from '@/types/investigation';
-import hpLogo from '@/assets/hp-logo.png';
-import rndLogo from '@/assets/rnd-logo.png';
 
 const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'chemical-spill', label: 'Chemical Spill' },
@@ -50,16 +48,12 @@ export default function NewInvestigation() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-6 flex items-center gap-3"
       >
-        <img src={hpLogo} alt="HP" className="h-10 w-auto" />
-        <div className="h-8 w-px bg-border" />
-        <img src={rndLogo} alt="R&D" className="h-10 w-auto" />
-        <div className="h-8 w-px bg-border" />
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <AlertTriangle className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-xl font-bold">New Incident Investigation</h1>
-          <p className="text-sm text-muted-foreground">Enter incident details to begin AI-guided root cause analysis</p>
+          <p className="text-sm text-muted-foreground">Enter incident details to begin root cause analysis</p>
         </div>
       </motion.div>
 
@@ -144,7 +138,7 @@ export default function NewInvestigation() {
             className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
             <Sparkles className="h-4 w-4" />
-            Begin AI Analysis
+            Begin Analysis
             <ArrowRight className="h-4 w-4" />
           </motion.button>
         </motion.div>

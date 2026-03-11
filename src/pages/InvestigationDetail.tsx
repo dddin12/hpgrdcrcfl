@@ -10,8 +10,6 @@ import CauseTreePanel from '@/components/analysis/CauseTreePanel';
 import RiskAssessmentPanel from '@/components/analysis/RiskAssessmentPanel';
 import CorrectiveActionsPanel from '@/components/analysis/CorrectiveActionsPanel';
 import { generateInvestigationReport } from '@/utils/generateReport';
-import hpLogo from '@/assets/hp-logo.png';
-import rndLogo from '@/assets/rnd-logo.png';
 
 const tabs = [
   { id: 'five-whys', label: '5 Whys', icon: FileSearch },
@@ -24,11 +22,34 @@ const tabs = [
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.1 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
+function buildAnalysisSummary(investigation: typeof mockInvestigations[0]): string {
+  const parts: string[] = [];
+  parts.push(`Incident involving ${investigation.equipment} in ${investigation.labName} — classified as ${investigation.severity.toUpperCase()} severity.`);
+  
+  if (investigation.immeditateCause) {
+    parts.push(`Immediate cause identified: ${investigation.immeditateCause}.`);
+  }
+  if (investigation.contributingCauses?.length) {
+    parts.push(`Contributing factors: ${investigation.contributingCauses.join('; ')}.`);
+  }
+  if (investigation.rootCause) {
+    parts.push(`Root cause: ${investigation.rootCause}.`);
+  }
+  if (investigation.riskScore) {
+    const riskLevel = investigation.riskScore >= 15 ? 'HIGH' : investigation.riskScore >= 8 ? 'MEDIUM' : 'LOW';
+    parts.push(`Risk score: ${investigation.riskScore}/25 (${riskLevel} risk quadrant).`);
+  }
+  if (!investigation.rootCause) {
+    parts.push('Root cause analysis is still pending — complete the 5 Whys and Fishbone analysis tabs to identify the root cause.');
+  }
+  return parts.join(' ');
+}
+
 export default function InvestigationDetail() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('five-whys');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const investigation = mockInvestigations.find(inv => inv.id === id) || mockInvestigations[0];
 
@@ -38,19 +59,14 @@ export default function InvestigationDetail() {
     setTimeout(() => setIsGenerating(false), 1000);
   };
 
-  const handleAiAnalysis = () => {
+  const handleGenerateSummary = () => {
     setIsAnalyzing(true);
-    setAiInsight(null);
-    // Simulate AI analysis
+    setAnalysisSummary(null);
+    // Brief delay for UX feedback, then build from real data
     setTimeout(() => {
-      setAiInsight(
-        `Based on the incident data and referenced SOPs, this ${investigation.severity}-severity incident involving ${investigation.equipment} shows a pattern consistent with deferred maintenance. ` +
-        `Key finding: The root cause traces back to gaps in CMMS configuration (SOP-MAINT-005 §4.2). ` +
-        `Risk score of ${investigation.riskScore}/25 places this in the HIGH risk quadrant. ` +
-        `Recommended priority: Implement automated PM alerts within 48 hours and conduct immediate seal inspection across all similar equipment.`
-      );
+      setAnalysisSummary(buildAnalysisSummary(investigation));
       setIsAnalyzing(false);
-    }, 2500);
+    }, 800);
   };
 
   return (
@@ -76,17 +92,9 @@ export default function InvestigationDetail() {
             className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-            {isGenerating ? 'Generating...' : 'Export Report'}
+            {isGenerating ? 'Generating...' : 'Download Report'}
           </motion.button>
         </div>
-      </motion.div>
-
-      {/* Company branding bar */}
-      <motion.div variants={item} className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2">
-        <img src={hpLogo} alt="HP" className="h-8 w-auto" />
-        <div className="h-6 w-px bg-border" />
-        <img src={rndLogo} alt="R&D" className="h-8 w-auto" />
-        <div className="ml-auto text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Confidential Investigation</div>
       </motion.div>
 
       <motion.div variants={item} className="grid gap-4 md:grid-cols-3">
@@ -94,7 +102,7 @@ export default function InvestigationDetail() {
           { label: 'Operator', value: investigation.operator },
           { label: 'Date & Time', value: new Date(investigation.dateTime).toLocaleString() },
           { label: 'Risk Score', value: `${investigation.riskScore ?? '—'} / 25`, highlight: true },
-        ].map((field, i) => (
+        ].map((field) => (
           <motion.div
             key={field.label}
             whileHover={{ scale: 1.02, y: -2 }}
@@ -113,12 +121,12 @@ export default function InvestigationDetail() {
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{investigation.immediateResponse}</p>
       </motion.div>
 
-      {/* AI Analysis Button */}
+      {/* Generate Analysis Summary */}
       <motion.div variants={item}>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          onClick={handleAiAnalysis}
+          onClick={handleGenerateSummary}
           disabled={isAnalyzing}
           className="w-full rounded-lg border border-primary/30 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 disabled:opacity-60"
         >
@@ -129,14 +137,14 @@ export default function InvestigationDetail() {
               <Sparkles className="h-5 w-5 text-primary" />
             )}
             <div>
-              <p className="text-sm font-semibold">{isAnalyzing ? 'AI is analyzing incident data and referenced SOPs...' : 'Run AI-Powered Analysis'}</p>
-              <p className="text-xs text-muted-foreground">Generate intelligent insights based on incident data and uploaded documents</p>
+              <p className="text-sm font-semibold">{isAnalyzing ? 'Generating summary...' : 'Generate Analysis Summary'}</p>
+              <p className="text-xs text-muted-foreground">Build a structured summary from the investigation data and analysis</p>
             </div>
           </div>
         </motion.button>
 
         <AnimatePresence>
-          {aiInsight && (
+          {analysisSummary && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -146,8 +154,8 @@ export default function InvestigationDetail() {
               <div className="flex items-start gap-3">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-primary">AI Analysis Summary</p>
-                  <p className="mt-2 text-sm leading-relaxed">{aiInsight}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary">Analysis Summary</p>
+                  <p className="mt-2 text-sm leading-relaxed">{analysisSummary}</p>
                 </div>
               </div>
             </motion.div>

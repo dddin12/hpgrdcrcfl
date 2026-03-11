@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AppSidebar from './AppSidebar';
 import { Bell } from 'lucide-react';
-import rndLogo from '@/assets/rnd-logo.png';
 
 export default function AppLayout() {
   return (
@@ -10,10 +9,7 @@ export default function AppLayout() {
       <AppSidebar />
       <div className="flex-1 pl-64">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm">
-          <div className="flex items-center gap-2">
-            <img src={rndLogo} alt="HP Green R&D" className="h-8 w-8 object-contain" />
-            <span className="text-xs font-medium text-muted-foreground">HP Green R&D Centre</span>
-          </div>
+          <span className="text-xs font-medium text-muted-foreground">HP Green R&D Centre — RCFA System</span>
           <div className="flex items-center gap-4">
             <motion.button
               whileHover={{ scale: 1.1 }}

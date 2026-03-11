@@ -29,6 +29,7 @@ const App = () => (
             <Route path="/investigation/:id" element={<InvestigationDetail />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/risk-matrix" element={<RiskMatrix />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

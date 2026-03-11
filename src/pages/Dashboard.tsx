@@ -3,15 +3,6 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, FileSearch, CheckCircle, Clock, TrendingUp, Plus, ArrowRight, Flame, Zap, FlaskConical } from 'lucide-react';
 import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
-import hpLogo from '@/assets/hp-logo.png';
-import rndLogo from '@/assets/rnd-logo.png';
-
-const stats = [
-  { label: 'Open Incidents', value: '2', icon: AlertTriangle, color: 'text-critical', bg: 'bg-critical/10' },
-  { label: 'In Progress', value: '1', icon: Clock, color: 'text-warning', bg: 'bg-warning/10' },
-  { label: 'Under Review', value: '1', icon: FileSearch, color: 'text-info', bg: 'bg-info/10' },
-  { label: 'Closed (MTD)', value: '12', icon: CheckCircle, color: 'text-success', bg: 'bg-success/10' },
-];
 
 const incidentIcons: Record<string, typeof Flame> = {
   'equipment-failure': Zap,
@@ -23,38 +14,37 @@ const incidentIcons: Record<string, typeof Flame> = {
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
+function computeStats() {
+  const counts = { open: 0, inProgress: 0, review: 0, closed: 0 };
+  mockInvestigations.forEach((inv) => {
+    if (inv.status === 'open') counts.open++;
+    else if (inv.status === 'in-progress') counts.inProgress++;
+    else if (inv.status === 'review') counts.review++;
+    else if (inv.status === 'closed') counts.closed++;
+  });
+  return [
+    { label: 'Open Incidents', value: String(counts.open), icon: AlertTriangle, color: 'text-critical', bg: 'bg-critical/10' },
+    { label: 'In Progress', value: String(counts.inProgress), icon: Clock, color: 'text-warning', bg: 'bg-warning/10' },
+    { label: 'Under Review', value: String(counts.review), icon: FileSearch, color: 'text-info', bg: 'bg-info/10' },
+    { label: 'Closed', value: String(counts.closed), icon: CheckCircle, color: 'text-success', bg: 'bg-success/10' },
+  ];
+}
+
 export default function Dashboard() {
+  const stats = computeStats();
+
   return (
     <div className="space-y-6">
-      {/* Hero banner with logos */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
         className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-r from-card via-card to-muted/50 p-6"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <motion.img
-              src={hpLogo}
-              alt="Hindustan Petroleum"
-              className="h-14 w-auto"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-            />
-            <div className="h-10 w-px bg-border" />
-            <motion.img
-              src={rndLogo}
-              alt="HP Green R&D Centre"
-              className="h-14 w-auto"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-            />
-            <div className="ml-4">
-              <h1 className="text-2xl font-bold">Investigation Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Root Cause Failure Analysis — HP Green R&D Centre</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold">Investigation Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Root Cause Failure Analysis — HP Green R&D Centre</p>
           </div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Link
@@ -66,7 +56,6 @@ export default function Dashboard() {
             </Link>
           </motion.div>
         </div>
-        {/* Decorative glow */}
         <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-info/10 blur-3xl" />
       </motion.div>
@@ -159,11 +148,17 @@ export default function Dashboard() {
           <div className="glass-card p-5">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Risk Distribution</h3>
             <div className="mt-4 space-y-3">
-              {[
-                { label: 'Critical', count: 1, total: 3, color: 'bg-critical' },
-                { label: 'High', count: 1, total: 3, color: 'bg-warning' },
-                { label: 'Medium', count: 1, total: 3, color: 'bg-info' },
-              ].map((r) => (
+              {(() => {
+                const total = mockInvestigations.length;
+                const critical = mockInvestigations.filter(i => i.severity === 'critical').length;
+                const high = mockInvestigations.filter(i => i.severity === 'high').length;
+                const medium = mockInvestigations.filter(i => i.severity === 'medium').length;
+                return [
+                  { label: 'Critical', count: critical, total, color: 'bg-critical' },
+                  { label: 'High', count: high, total, color: 'bg-warning' },
+                  { label: 'Medium', count: medium, total, color: 'bg-info' },
+                ];
+              })().map((r) => (
                 <div key={r.label}>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">{r.label}</span>
@@ -173,7 +168,7 @@ export default function Dashboard() {
                     <motion.div
                       className={`h-full rounded-full ${r.color}`}
                       initial={{ width: 0 }}
-                      animate={{ width: `${(r.count / r.total) * 100}%` }}
+                      animate={{ width: r.total > 0 ? `${(r.count / r.total) * 100}%` : '0%' }}
                       transition={{ delay: 0.8, duration: 0.8, ease: 'easeOut' }}
                     />
                   </div>
