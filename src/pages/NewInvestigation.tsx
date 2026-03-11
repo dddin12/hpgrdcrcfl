@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { AlertTriangle, Upload, ArrowRight, Sparkles } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle, Upload, ArrowRight, Sparkles, X, FileText } from 'lucide-react';
 import { IncidentType, IncidentSeverity } from '@/types/investigation';
+import { toast } from 'sonner';
 
 const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'chemical-spill', label: 'Chemical Spill' },
@@ -21,8 +22,17 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wider text-mu
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 export default function NewInvestigation() {
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [formData, setFormData] = useState({
     labName: '',
     equipment: '',
@@ -36,8 +46,30 @@ export default function NewInvestigation() {
 
   const update = (field: string, value: string) => setFormData(prev => ({ ...prev, [field]: value }));
 
+  const addFiles = (files: FileList | File[]) => {
+    const newFiles = Array.from(files);
+    const oversized = newFiles.filter(f => f.size > 20 * 1024 * 1024);
+    const valid = newFiles.filter(f => f.size <= 20 * 1024 * 1024);
+    if (oversized.length) toast.error(`${oversized.length} file(s) exceed 20 MB limit`);
+    if (valid.length) {
+      setAttachments(prev => [...prev, ...valid]);
+      toast.success(`${valid.length} file(s) attached`);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    toast.success('Investigation created successfully');
     navigate('/investigation/INV-2026-001');
   };
 
@@ -113,9 +145,23 @@ export default function NewInvestigation() {
 
         <motion.div variants={item} className="p-6">
           <label className={labelClass}>Attachments</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.csv,.xlsx"
+            className="hidden"
+            onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
+          />
           <motion.div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
             whileHover={{ borderColor: 'hsl(38 92% 55% / 0.5)' }}
-            className="flex items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 p-8 transition-colors"
+            className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+              dragOver ? 'border-primary bg-primary/5' : 'border-border bg-muted/50'
+            }`}
           >
             <div className="text-center">
               <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2, repeat: Infinity }}>
@@ -125,6 +171,29 @@ export default function NewInvestigation() {
               <p className="text-xs text-muted-foreground">Photos, logs, data files (max 20MB each)</p>
             </div>
           </motion.div>
+
+          <AnimatePresence>
+            {attachments.length > 0 && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-3 space-y-2">
+                {attachments.map((file, i) => (
+                  <motion.div
+                    key={file.name + i}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="flex items-center gap-3 rounded-md border border-border bg-muted/50 px-3 py-2"
+                  >
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="flex-1 truncate text-sm text-foreground">{file.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
+                    <button type="button" onClick={() => removeFile(i)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         <motion.div variants={item} className="flex items-center justify-end gap-3 p-6">
