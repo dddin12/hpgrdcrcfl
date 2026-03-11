@@ -10,6 +10,7 @@ import NewInvestigation from "./pages/NewInvestigation";
 import InvestigationDetail from "./pages/InvestigationDetail";
 import Documents from "./pages/Documents";
 import RiskMatrix from "./pages/RiskMatrix";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
