@@ -1,0 +1,58 @@
+import { Investigation, UploadedDocument } from '@/types/investigation';
+
+export const mockInvestigations: Investigation[] = [
+  {
+    id: 'INV-2026-001',
+    labName: 'Analytical Chemistry Lab B',
+    equipment: 'HPLC System — Agilent 1260',
+    incidentType: 'equipment-failure',
+    description: 'HPLC pump failed during a critical batch analysis, causing solvent leak near electrical panel. Operator noticed unusual noise 10 minutes prior.',
+    operator: 'Dr. Sarah Chen',
+    dateTime: '2026-03-10T14:30:00',
+    immediateResponse: 'Emergency shutdown initiated. Spill kit deployed. Area evacuated per SOP-CHEM-012.',
+    severity: 'high',
+    status: 'in-progress',
+    createdAt: '2026-03-10T15:00:00',
+    riskScore: 16,
+    immeditateCause: 'Pump seal failure leading to solvent leak',
+    contributingCauses: ['Delayed preventive maintenance', 'High pump pressure settings'],
+    rootCause: 'Preventive maintenance schedule not followed per SOP-MAINT-005',
+  },
+  {
+    id: 'INV-2026-002',
+    labName: 'Materials Testing Lab',
+    equipment: 'Universal Testing Machine — Instron 5985',
+    incidentType: 'other',
+    description: 'Specimen ejected during tensile test. Fragment struck safety shield. No injuries.',
+    operator: 'James Rodriguez',
+    dateTime: '2026-03-08T09:15:00',
+    immediateResponse: 'Test halted. Area inspected. Safety shield integrity verified.',
+    severity: 'medium',
+    status: 'open',
+    createdAt: '2026-03-08T10:00:00',
+    riskScore: 9,
+  },
+  {
+    id: 'INV-2026-003',
+    labName: 'Polymer Research Lab',
+    equipment: 'Extruder — Brabender TSE 20/40',
+    incidentType: 'fire',
+    description: 'Minor thermal event at die head. Polymer degradation caused smoke. Fire suppression not activated.',
+    operator: 'Dr. Anika Patel',
+    dateTime: '2026-03-05T16:45:00',
+    immediateResponse: 'Extruder shut down. Ventilation activated. Fire watch maintained for 30 min.',
+    severity: 'critical',
+    status: 'review',
+    createdAt: '2026-03-05T17:00:00',
+    riskScore: 20,
+    rootCause: 'Temperature controller malfunction combined with incorrect material grade loaded',
+  },
+];
+
+export const mockDocuments: UploadedDocument[] = [
+  { id: 'DOC-001', name: 'SOP-CHEM-012 — Chemical Spill Response', type: 'sop', uploadedAt: '2026-01-15', size: '2.4 MB' },
+  { id: 'DOC-002', name: 'Agilent 1260 HPLC Service Manual', type: 'equipment-manual', uploadedAt: '2026-01-20', size: '15.8 MB' },
+  { id: 'DOC-003', name: 'Lab Safety Manual — Rev. 12', type: 'safety-manual', uploadedAt: '2026-02-01', size: '8.1 MB' },
+  { id: 'DOC-004', name: 'SOP-MAINT-005 — Preventive Maintenance Schedule', type: 'maintenance', uploadedAt: '2026-02-10', size: '1.2 MB' },
+  { id: 'DOC-005', name: 'Instron 5985 Operating Procedures', type: 'equipment-manual', uploadedAt: '2026-02-15', size: '12.3 MB' },
+];
