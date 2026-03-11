@@ -1,6 +1,8 @@
 import { Outlet } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import AppSidebar from './AppSidebar';
 import { Bell } from 'lucide-react';
+import rndLogo from '@/assets/rnd-logo.png';
 
 export default function AppLayout() {
   return (
@@ -8,12 +10,19 @@ export default function AppLayout() {
       <AppSidebar />
       <div className="flex-1 pl-64">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-sm">
-          <div />
+          <div className="flex items-center gap-2">
+            <img src={rndLogo} alt="HP Green R&D" className="h-8 w-8 object-contain" />
+            <span className="text-xs font-medium text-muted-foreground">HP Green R&D Centre</span>
+          </div>
           <div className="flex items-center gap-4">
-            <button className="relative rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              className="relative rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
               <Bell className="h-4 w-4" />
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-critical" />
-            </button>
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-critical animate-pulse" />
+            </motion.button>
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                 SA
@@ -23,7 +32,13 @@ export default function AppLayout() {
           </div>
         </header>
         <main className="p-6">
-          <Outlet />
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Outlet />
+          </motion.div>
         </main>
       </div>
     </div>

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Upload, ArrowRight } from 'lucide-react';
+import { AlertTriangle, Upload, ArrowRight, Sparkles } from 'lucide-react';
 import { IncidentType, IncidentSeverity } from '@/types/investigation';
+import hpLogo from '@/assets/hp-logo.png';
+import rndLogo from '@/assets/rnd-logo.png';
 
 const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'chemical-spill', label: 'Chemical Spill' },
@@ -15,8 +17,11 @@ const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all duration-200";
 const labelClass = "block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5";
+
+const container = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
 export default function NewInvestigation() {
   const navigate = useNavigate();
@@ -40,7 +45,15 @@ export default function NewInvestigation() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="mb-6 flex items-center gap-3">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 flex items-center gap-3"
+      >
+        <img src={hpLogo} alt="HP" className="h-10 w-auto" />
+        <div className="h-8 w-px bg-border" />
+        <img src={rndLogo} alt="R&D" className="h-10 w-auto" />
+        <div className="h-8 w-px bg-border" />
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <AlertTriangle className="h-5 w-5 text-primary" />
         </div>
@@ -48,15 +61,16 @@ export default function NewInvestigation() {
           <h1 className="text-xl font-bold">New Incident Investigation</h1>
           <p className="text-sm text-muted-foreground">Enter incident details to begin AI-guided root cause analysis</p>
         </div>
-      </div>
+      </motion.div>
 
       <motion.form
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        variants={container}
+        initial="hidden"
+        animate="show"
         onSubmit={handleSubmit}
         className="glass-card divide-y divide-border"
       >
-        <div className="grid gap-5 p-6 md:grid-cols-2">
+        <motion.div variants={item} className="grid gap-5 p-6 md:grid-cols-2">
           <div>
             <label className={labelClass}>Lab Name</label>
             <input className={fieldClass} placeholder="e.g. Analytical Chemistry Lab B" value={formData.labName} onChange={e => update('labName', e.target.value)} required />
@@ -90,9 +104,9 @@ export default function NewInvestigation() {
             <label className={labelClass}>Date & Time of Incident</label>
             <input type="datetime-local" className={fieldClass} value={formData.dateTime} onChange={e => update('dateTime', e.target.value)} required />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="space-y-5 p-6">
+        <motion.div variants={item} className="space-y-5 p-6">
           <div>
             <label className={labelClass}>Incident Description</label>
             <textarea className={fieldClass + ' min-h-[100px] resize-y'} placeholder="Describe what happened, including timeline of events..." value={formData.description} onChange={e => update('description', e.target.value)} required />
@@ -101,28 +115,39 @@ export default function NewInvestigation() {
             <label className={labelClass}>Immediate Response Taken</label>
             <textarea className={fieldClass + ' min-h-[80px] resize-y'} placeholder="What actions were taken immediately after the incident?" value={formData.immediateResponse} onChange={e => update('immediateResponse', e.target.value)} />
           </div>
-        </div>
+        </motion.div>
 
-        <div className="p-6">
+        <motion.div variants={item} className="p-6">
           <label className={labelClass}>Attachments</label>
-          <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 p-8 transition-colors hover:border-primary/50">
+          <motion.div
+            whileHover={{ borderColor: 'hsl(38 92% 55% / 0.5)' }}
+            className="flex items-center justify-center rounded-lg border-2 border-dashed border-border bg-muted/50 p-8 transition-colors"
+          >
             <div className="text-center">
-              <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
+              <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2, repeat: Infinity }}>
+                <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
+              </motion.div>
               <p className="mt-2 text-sm text-muted-foreground">Drop files here or click to upload</p>
               <p className="text-xs text-muted-foreground">Photos, logs, data files (max 20MB each)</p>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
-        <div className="flex items-center justify-end gap-3 p-6">
-          <button type="button" onClick={() => navigate('/')} className="rounded-lg px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground">
+        <motion.div variants={item} className="flex items-center justify-end gap-3 p-6">
+          <button type="button" onClick={() => navigate('/')} className="rounded-lg px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Cancel
           </button>
-          <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90">
+          <motion.button
+            type="submit"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            <Sparkles className="h-4 w-4" />
             Begin AI Analysis
             <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
       </motion.form>
     </div>
   );
