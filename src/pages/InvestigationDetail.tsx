@@ -56,8 +56,14 @@ export default function InvestigationDetail() {
 
   const handleExport = async () => {
     setIsGenerating(true);
-    await generateInvestigationReport(investigation);
-    setTimeout(() => setIsGenerating(false), 1000);
+    try {
+      await generateInvestigationReport(investigation);
+      toast.success('Report downloaded — open the HTML file and print to PDF');
+    } catch {
+      toast.error('Failed to generate report');
+    } finally {
+      setTimeout(() => setIsGenerating(false), 500);
+    }
   };
 
   const handleGenerateSummary = () => {
