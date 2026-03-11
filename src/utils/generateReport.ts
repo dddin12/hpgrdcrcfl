@@ -25,9 +25,7 @@ const correctiveActions = [
 ];
 
 export async function generateInvestigationReport(investigation: Investigation): Promise<void> {
-  // Build an HTML document for printing as PDF
-  const html = `
-<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
@@ -36,9 +34,6 @@ export async function generateInvestigationReport(investigation: Investigation):
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; padding: 40px; line-height: 1.6; }
   .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #d4a017; padding-bottom: 20px; margin-bottom: 30px; }
-  .header-left { display: flex; align-items: center; gap: 16px; }
-  .header img { height: 60px; }
-  .header-divider { width: 1px; height: 50px; background: #ccc; }
   .header-title { text-align: right; }
   .header-title h1 { font-size: 22px; color: #1a1a2e; }
   .header-title p { font-size: 11px; color: #666; letter-spacing: 2px; text-transform: uppercase; }
@@ -68,22 +63,19 @@ export async function generateInvestigationReport(investigation: Investigation):
   .cause-item { padding: 8px 12px; border-left: 3px solid #d4a017; background: #f8f8f8; margin-bottom: 8px; border-radius: 0 6px 6px 0; }
   .cause-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #888; }
   .cause-label { font-size: 13px; font-weight: 500; margin-top: 2px; }
-  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #888; }
-  .footer img { height: 30px; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e5e5; text-align: center; font-size: 11px; color: #888; }
   @media print { body { padding: 20px; } .section { page-break-inside: avoid; } }
 </style>
 </head>
 <body>
   <div class="header">
-    <div class="header-left">
-      <img src="/images/hp-logo.png" alt="HP">
-      <div class="header-divider"></div>
-      <img src="/images/rnd-logo.png" alt="R&D">
+    <div>
+      <h1 style="font-size:22px;color:#1a1a2e;">RCFA Investigation Report</h1>
+      <p style="font-size:11px;color:#666;letter-spacing:2px;text-transform:uppercase;">Root Cause Failure Analysis</p>
     </div>
     <div class="header-title">
-      <h1>Investigation Report</h1>
-      <p>Root Cause Failure Analysis</p>
-      <p style="font-size:14px; color:#1a1a2e; font-weight:600; letter-spacing:0; text-transform:none; margin-top:4px;">${investigation.id}</p>
+      <p style="font-size:14px;color:#1a1a2e;font-weight:600;">${investigation.id}</p>
+      <p>Generated ${new Date().toLocaleDateString()}</p>
     </div>
   </div>
 
@@ -159,28 +151,20 @@ export async function generateInvestigationReport(investigation: Investigation):
   </div>
 
   <div class="footer">
-    <div>
-      <img src="/images/hp-logo.png" alt="HP">
-    </div>
-    <div style="text-align:center;">
-      <p>CONFIDENTIAL — Hindustan Petroleum Corporation Limited</p>
-      <p>HP Green R&D Centre — Root Cause Failure Analysis Report</p>
-    </div>
-    <div>
-      <img src="/images/rnd-logo.png" alt="R&D">
-    </div>
-  </div>
-
-  <div style="text-align:center;margin-top:20px;font-size:10px;color:#aaa;">
-    Generated on ${new Date().toLocaleString()} | RCFA Investigation System
+    <p>CONFIDENTIAL — Root Cause Failure Analysis Report</p>
+    <p>Generated on ${new Date().toLocaleString()} | RCFA Investigation System</p>
   </div>
 </body>
 </html>`;
 
-  const printWindow = window.open('', '_blank');
-  if (printWindow) {
-    printWindow.document.write(html);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  }
+  // Create a Blob and trigger direct download — no popup blocker issues
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `RCFA-Report-${investigation.id}.html`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

@@ -10,6 +10,7 @@ import CauseTreePanel from '@/components/analysis/CauseTreePanel';
 import RiskAssessmentPanel from '@/components/analysis/RiskAssessmentPanel';
 import CorrectiveActionsPanel from '@/components/analysis/CorrectiveActionsPanel';
 import { generateInvestigationReport } from '@/utils/generateReport';
+import { toast } from 'sonner';
 
 const tabs = [
   { id: 'five-whys', label: '5 Whys', icon: FileSearch },
