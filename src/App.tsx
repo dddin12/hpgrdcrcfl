@@ -10,6 +10,7 @@ import NewInvestigation from "./pages/NewInvestigation";
 import InvestigationDetail from "./pages/InvestigationDetail";
 import Documents from "./pages/Documents";
 import RiskMatrix from "./pages/RiskMatrix";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/investigation/:id" element={<InvestigationDetail />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/risk-matrix" element={<RiskMatrix />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

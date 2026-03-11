@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import { FileText, Upload, BookOpen, Wrench, ShieldCheck, Settings2 } from 'lucide-react';
 import { mockDocuments } from '@/data/mockData';
-import rndLogo from '@/assets/rnd-logo.png';
 
 const typeIcons: Record<string, typeof FileText> = {
   sop: BookOpen,
@@ -24,12 +23,9 @@ export default function Documents() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src={rndLogo} alt="R&D" className="h-8 w-auto" />
-          <div>
-            <h1 className="text-2xl font-bold">Document Intelligence</h1>
-            <p className="text-sm text-muted-foreground">Upload and manage SOPs, manuals, and procedures for AI-powered analysis</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold">Document Intelligence</h1>
+          <p className="text-sm text-muted-foreground">Upload and manage SOPs, manuals, and procedures for analysis</p>
         </div>
         <motion.button
           whileHover={{ scale: 1.05 }}

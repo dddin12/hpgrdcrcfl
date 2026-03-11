@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, Flame, Zap, FlaskConical } from 'lucide-react';
 import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
-import hpLogo from '@/assets/hp-logo.png';
 
 const incidentIcons: Record<string, typeof Flame> = {
   'equipment-failure': Zap,
@@ -18,9 +17,9 @@ const item = { hidden: { opacity: 0, x: -20 }, show: { opacity: 1, x: 0 } };
 export default function Investigations() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <img src={hpLogo} alt="HP" className="h-8 w-auto" />
+      <div>
         <h1 className="text-2xl font-bold">All Investigations</h1>
+        <p className="text-sm text-muted-foreground">{mockInvestigations.length} total investigations</p>
       </div>
       <motion.div variants={container} initial="hidden" animate="show" className="glass-card divide-y divide-border">
         {mockInvestigations.map((inv) => {
