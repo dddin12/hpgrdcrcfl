@@ -5,36 +5,107 @@ interface Props {
   investigation: Investigation;
 }
 
-const topCategories = [
-  { name: 'Equipment', causes: ['Pump seal wear', 'High operating pressure', 'Aging solvent lines'] },
-  { name: 'Process', causes: ['No pre-run inspection', 'Batch pressure exceeded spec', 'Manual override used'] },
-  { name: 'People', causes: ['Operator unfamiliar with warning signs', 'Shift handover gaps'] },
+interface Category {
+  name: string;
+  causes: string[];
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  dotColor: string;
+}
+
+const topCategories: Category[] = [
+  {
+    name: 'Equipment',
+    causes: ['Eddy current absorber wear', 'Coolant flow sensor drift', 'Aging drive shaft coupling'],
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
+    borderColor: 'border-red-500/40',
+    dotColor: 'bg-red-500',
+  },
+  {
+    name: 'Process',
+    causes: ['No pre-test calibration check', 'WLTC cycle parameters exceeded spec', 'Manual torque override used'],
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/10',
+    borderColor: 'border-blue-500/40',
+    dotColor: 'bg-blue-500',
+  },
+  {
+    name: 'People',
+    causes: ['Operator unfamiliar with thermal warning signs', 'Shift handover gaps on dyno status'],
+    color: 'text-green-400',
+    bgColor: 'bg-green-500/10',
+    borderColor: 'border-green-500/40',
+    dotColor: 'bg-green-500',
+  },
 ];
 
-const bottomCategories = [
-  { name: 'Maintenance', causes: ['PM overdue 3 weeks', 'No CMMS alerts', 'Spare parts not stocked'] },
-  { name: 'Environment', causes: ['High ambient temperature', 'Vibration from nearby equipment'] },
-  { name: 'Management', causes: ['No maintenance KPIs tracked', 'Understaffed maintenance team'] },
+const bottomCategories: Category[] = [
+  {
+    name: 'Maintenance',
+    causes: ['PM overdue 3 weeks on absorber', 'No CMMS alerts for dyno', 'Coolant hoses not inspected'],
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/40',
+    dotColor: 'bg-orange-500',
+  },
+  {
+    name: 'Environment',
+    causes: ['High ambient cell temperature', 'Vibration from adjacent test cell'],
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10',
+    borderColor: 'border-teal-500/40',
+    dotColor: 'bg-teal-500',
+  },
+  {
+    name: 'Management',
+    causes: ['No dyno utilization KPIs', 'Understaffed test cell team', 'Budget cuts on spare parts'],
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-500/10',
+    borderColor: 'border-purple-500/40',
+    dotColor: 'bg-purple-500',
+  },
 ];
 
-const SPINE_Y = 200;
-const SPINE_X_START = 40;
-const SPINE_X_END = 820;
-const BONE_POSITIONS = [160, 400, 640]; // x positions where bones meet spine
-const BONE_LENGTH = 140; // vertical length of each main bone
-const SUB_BONE_OFFSET = 20; // horizontal offset for sub-bones
+function CategoryBone({ cat, index, side }: { cat: Category; index: number; side: 'top' | 'bottom' }) {
+  const delay = 0.2 + index * 0.15;
 
-function drawPath(d: string, delay: number, color: string) {
   return (
-    <motion.path
-      d={d}
-      stroke={color}
-      strokeWidth={2}
-      fill="none"
-      initial={{ pathLength: 0 }}
-      animate={{ pathLength: 1 }}
-      transition={{ duration: 0.5, delay }}
-    />
+    <motion.div
+      initial={{ opacity: 0, y: side === 'top' ? 20 : -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.4 }}
+      className="flex-1 min-w-[140px] flex flex-col items-center gap-2"
+    >
+      {side === 'bottom' && (
+        <div className={`w-px h-8 ${cat.dotColor} opacity-40`} />
+      )}
+      <div className={`rounded-lg border-2 ${cat.borderColor} ${cat.bgColor} px-3 py-2 w-full max-w-[180px]`}>
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${cat.dotColor}`} />
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${cat.color}`}>
+            {cat.name}
+          </span>
+        </div>
+        <div className="space-y-1">
+          {cat.causes.map((cause, ci) => (
+            <motion.div
+              key={cause}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: delay + 0.1 + ci * 0.08 }}
+              className={`text-[10px] leading-tight px-2 py-1 rounded ${cat.bgColor} border ${cat.borderColor} text-muted-foreground`}
+            >
+              {cause}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+      {side === 'top' && (
+        <div className={`w-px h-8 ${cat.dotColor} opacity-40`} />
+      )}
+    </motion.div>
   );
 }
 
@@ -46,130 +117,42 @@ export default function FishbonePanel({ investigation }: Props) {
         <span className="font-medium text-foreground">{investigation.equipment}</span>
       </p>
 
-      <div className="relative min-w-[900px]" style={{ height: 440 }}>
-        <svg className="absolute inset-0 w-full h-full" viewBox="0 0 900 440" preserveAspectRatio="xMidYMid meet">
-          {/* Main spine */}
-          {drawPath(`M ${SPINE_X_START} ${SPINE_Y} L ${SPINE_X_END} ${SPINE_Y}`, 0, 'hsl(var(--border))')}
+      <div className="min-w-[600px] pb-4">
+        {/* Top categories */}
+        <div className="flex gap-3 justify-center px-4">
+          {topCategories.map((cat, i) => (
+            <CategoryBone key={cat.name} cat={cat} index={i} side="top" />
+          ))}
+        </div>
 
-          {/* Fish head arrow */}
-          {drawPath(`M ${SPINE_X_END} ${SPINE_Y} L ${SPINE_X_END - 15} ${SPINE_Y - 12} M ${SPINE_X_END} ${SPINE_Y} L ${SPINE_X_END - 15} ${SPINE_Y + 12}`, 0.3, 'hsl(var(--destructive))')}
+        {/* Central spine */}
+        <div className="relative flex items-center mx-4 my-0">
+          <motion.div
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.6 }}
+            className="flex-1 h-1 bg-gradient-to-r from-muted via-primary/60 to-destructive rounded-full origin-left"
+          />
+          {/* Fish head / Effect */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5 }}
+            className="ml-2 shrink-0 rounded-lg border-2 border-destructive bg-destructive/10 px-4 py-2 text-center"
+          >
+            <p className="text-[9px] font-bold uppercase tracking-wider text-destructive">Effect</p>
+            <p className="text-xs font-semibold leading-tight mt-0.5 text-foreground">
+              Dyno Failure
+            </p>
+          </motion.div>
+        </div>
 
-          {/* Top bones (angled toward the right) */}
-          {BONE_POSITIONS.map((x, i) => {
-            const topY = SPINE_Y - BONE_LENGTH;
-            const category = topCategories[i];
-            return (
-              <g key={`top-${i}`}>
-                {/* Main diagonal bone */}
-                {drawPath(`M ${x} ${SPINE_Y} L ${x + 40} ${topY}`, 0.2 + i * 0.15, 'hsl(var(--primary))')}
-                {/* Sub-bones for each cause */}
-                {category.causes.map((_, ci) => {
-                  const cy = SPINE_Y - ((ci + 1) * (BONE_LENGTH / (category.causes.length + 1)));
-                  const cx = x + (40 * (BONE_LENGTH - (SPINE_Y - cy)) / BONE_LENGTH);
-                  return drawPath(
-                    `M ${cx} ${cy} L ${cx - SUB_BONE_OFFSET - 30} ${cy - 4}`,
-                    0.4 + i * 0.15 + ci * 0.08,
-                    'hsl(var(--muted-foreground) / 0.5)'
-                  );
-                })}
-              </g>
-            );
-          })}
-
-          {/* Bottom bones */}
-          {BONE_POSITIONS.map((x, i) => {
-            const bottomY = SPINE_Y + BONE_LENGTH;
-            const category = bottomCategories[i];
-            return (
-              <g key={`bottom-${i}`}>
-                {drawPath(`M ${x} ${SPINE_Y} L ${x + 40} ${bottomY}`, 0.2 + i * 0.15, 'hsl(var(--primary))')}
-                {category.causes.map((_, ci) => {
-                  const cy = SPINE_Y + ((ci + 1) * (BONE_LENGTH / (category.causes.length + 1)));
-                  const cx = x + (40 * (cy - SPINE_Y) / BONE_LENGTH);
-                  return drawPath(
-                    `M ${cx} ${cy} L ${cx - SUB_BONE_OFFSET - 30} ${cy + 4}`,
-                    0.4 + i * 0.15 + ci * 0.08,
-                    'hsl(var(--muted-foreground) / 0.5)'
-                  );
-                })}
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Effect (fish head) label */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5 }}
-          className="absolute rounded-lg border-2 border-destructive bg-destructive/10 px-3 py-2 text-center"
-          style={{ right: 10, top: SPINE_Y - 28, width: 70 }}
-        >
-          <p className="text-[9px] font-bold uppercase tracking-wider text-destructive">Effect</p>
-          <p className="text-[10px] font-semibold leading-tight mt-0.5">Pump Failure</p>
-        </motion.div>
-
-        {/* Top category labels + causes */}
-        {topCategories.map((cat, i) => {
-          const x = BONE_POSITIONS[i];
-          const topY = SPINE_Y - BONE_LENGTH;
-          return (
-            <motion.div
-              key={cat.name}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + i * 0.15 }}
-              className="absolute"
-              style={{ left: x - 10, top: topY - 50, width: 140 }}
-            >
-              <p className="text-xs font-bold uppercase tracking-wider text-primary text-center">{cat.name}</p>
-              <ul className="mt-1 space-y-0.5">
-                {cat.causes.map((cause, ci) => (
-                  <motion.li
-                    key={cause}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 + i * 0.15 + ci * 0.1 }}
-                    className="text-[10px] text-muted-foreground leading-tight"
-                  >
-                    • {cause}
-                  </motion.li>
-                ))}
-              </ul>
-            </motion.div>
-          );
-        })}
-
-        {/* Bottom category labels + causes */}
-        {bottomCategories.map((cat, i) => {
-          const x = BONE_POSITIONS[i];
-          const bottomY = SPINE_Y + BONE_LENGTH;
-          return (
-            <motion.div
-              key={cat.name}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + i * 0.15 }}
-              className="absolute"
-              style={{ left: x - 10, top: bottomY + 10, width: 140 }}
-            >
-              <p className="text-xs font-bold uppercase tracking-wider text-primary text-center">{cat.name}</p>
-              <ul className="mt-1 space-y-0.5">
-                {cat.causes.map((cause, ci) => (
-                  <motion.li
-                    key={cause}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.5 + i * 0.15 + ci * 0.1 }}
-                    className="text-[10px] text-muted-foreground leading-tight"
-                  >
-                    • {cause}
-                  </motion.li>
-                ))}
-              </ul>
-            </motion.div>
-          );
-        })}
+        {/* Bottom categories */}
+        <div className="flex gap-3 justify-center px-4">
+          {bottomCategories.map((cat, i) => (
+            <CategoryBone key={cat.name} cat={cat} index={i} side="bottom" />
+          ))}
+        </div>
       </div>
     </div>
   );
