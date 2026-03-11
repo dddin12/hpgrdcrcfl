@@ -1,4 +1,6 @@
 import { Investigation } from '@/types/investigation';
+import hpLogoUrl from '@/assets/hp-logo.png';
+import rndLogoUrl from '@/assets/rnd-logo.png';
 
 const causeTree = [
   { label: 'HPLC Pump Failure & Solvent Leak', type: 'EFFECT' },
@@ -24,7 +26,19 @@ const correctiveActions = [
   { id: 'CA-005', desc: 'Stock critical spare parts in lab inventory', priority: 'LOW', assignee: 'Procurement', due: '2026-03-25' },
 ];
 
+async function toBase64(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.readAsDataURL(blob);
+  });
+}
+
 export async function generateInvestigationReport(investigation: Investigation): Promise<void> {
+  const [hpLogo, rndLogo] = await Promise.all([toBase64(hpLogoUrl), toBase64(rndLogoUrl)]);
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -34,7 +48,10 @@ export async function generateInvestigationReport(investigation: Investigation):
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; padding: 40px; line-height: 1.6; }
   .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #d4a017; padding-bottom: 20px; margin-bottom: 30px; }
-  .header-title { text-align: right; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-logo { height: 48px; width: auto; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header-right img { height: 40px; width: auto; }
   .header-title h1 { font-size: 22px; color: #1a1a2e; }
   .header-title p { font-size: 11px; color: #666; letter-spacing: 2px; text-transform: uppercase; }
   .section { margin-bottom: 28px; page-break-inside: avoid; }
@@ -63,19 +80,28 @@ export async function generateInvestigationReport(investigation: Investigation):
   .cause-item { padding: 8px 12px; border-left: 3px solid #d4a017; background: #f8f8f8; margin-bottom: 8px; border-radius: 0 6px 6px 0; }
   .cause-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #888; }
   .cause-label { font-size: 13px; font-weight: 500; margin-top: 2px; }
-  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e5e5; text-align: center; font-size: 11px; color: #888; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; }
+  .footer-logos { display: flex; align-items: center; gap: 12px; }
+  .footer-logos img { height: 24px; width: auto; opacity: 0.6; }
+  .footer-text { text-align: right; font-size: 11px; color: #888; }
   @media print { body { padding: 20px; } .section { page-break-inside: avoid; } }
 </style>
 </head>
 <body>
   <div class="header">
-    <div>
-      <h1 style="font-size:22px;color:#1a1a2e;">RCFA Investigation Report</h1>
-      <p style="font-size:11px;color:#666;letter-spacing:2px;text-transform:uppercase;">Root Cause Failure Analysis</p>
+    <div class="header-left">
+      <img src="${hpLogo}" alt="HP Logo" class="header-logo" />
+      <div>
+        <h1 style="font-size:22px;color:#1a1a2e;">RCFA Investigation Report</h1>
+        <p style="font-size:11px;color:#666;letter-spacing:2px;text-transform:uppercase;">Root Cause Failure Analysis</p>
+      </div>
     </div>
-    <div class="header-title">
-      <p style="font-size:14px;color:#1a1a2e;font-weight:600;">${investigation.id}</p>
-      <p>Generated ${new Date().toLocaleDateString()}</p>
+    <div class="header-right">
+      <div class="header-title" style="text-align:right;">
+        <p style="font-size:14px;color:#1a1a2e;font-weight:600;">${investigation.id}</p>
+        <p style="font-size:11px;color:#666;">Generated ${new Date().toLocaleDateString()}</p>
+      </div>
+      <img src="${rndLogo}" alt="RnD Logo" class="header-logo" />
     </div>
   </div>
 
@@ -151,13 +177,18 @@ export async function generateInvestigationReport(investigation: Investigation):
   </div>
 
   <div class="footer">
-    <p>CONFIDENTIAL — Root Cause Failure Analysis Report</p>
-    <p>Generated on ${new Date().toLocaleString()} | RCFA Investigation System</p>
+    <div class="footer-logos">
+      <img src="${hpLogo}" alt="HP Logo" />
+      <img src="${rndLogo}" alt="RnD Logo" />
+    </div>
+    <div class="footer-text">
+      <p>CONFIDENTIAL — Root Cause Failure Analysis Report</p>
+      <p>Generated on ${new Date().toLocaleString()} | RCFA Investigation System</p>
+    </div>
   </div>
 </body>
 </html>`;
 
-  // Create a Blob and trigger direct download — no popup blocker issues
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
