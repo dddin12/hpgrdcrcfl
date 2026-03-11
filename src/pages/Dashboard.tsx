@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { AlertTriangle, FileSearch, CheckCircle, Clock, TrendingUp, Plus, ArrowRight, Flame, Zap, FlaskConical } from 'lucide-react';
 import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
+import hpLogo from '@/assets/hp-logo.png';
+import rndLogo from '@/assets/rnd-logo.png';
 
 const stats = [
   { label: 'Open Incidents', value: '2', icon: AlertTriangle, color: 'text-critical', bg: 'bg-critical/10' },
@@ -24,38 +26,89 @@ const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 export default function Dashboard() {
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Investigation Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Root Cause Failure Analysis — Overview</p>
+      {/* Hero banner with logos */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-r from-card via-card to-muted/50 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.img
+              src={hpLogo}
+              alt="Hindustan Petroleum"
+              className="h-14 w-auto"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+            />
+            <div className="h-10 w-px bg-border" />
+            <motion.img
+              src={rndLogo}
+              alt="HP Green R&D Centre"
+              className="h-14 w-auto"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            />
+            <div className="ml-4">
+              <h1 className="text-2xl font-bold">Investigation Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Root Cause Failure Analysis — HP Green R&D Centre</p>
+            </div>
+          </div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Link
+              to="/new-investigation"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              New Investigation
+            </Link>
+          </motion.div>
         </div>
-        <Link
-          to="/new-investigation"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          New Investigation
-        </Link>
-      </div>
+        {/* Decorative glow */}
+        <div className="absolute -right-20 -top-20 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-info/10 blur-3xl" />
+      </motion.div>
 
       <motion.div variants={container} initial="hidden" animate="show" className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <motion.div key={stat.label} variants={item} className="glass-card p-5">
+          <motion.div
+            key={stat.label}
+            variants={item}
+            whileHover={{ scale: 1.03, y: -4 }}
+            className="glass-card p-5 cursor-default transition-shadow hover:shadow-lg"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{stat.label}</p>
-                <p className="mt-1 text-3xl font-bold">{stat.value}</p>
+                <motion.p
+                  className="mt-1 text-3xl font-bold"
+                  initial={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.5, type: 'spring' }}
+                >
+                  {stat.value}
+                </motion.p>
               </div>
-              <div className={`flex h-11 w-11 items-center justify-center rounded-lg ${stat.bg}`}>
+              <motion.div
+                className={`flex h-11 w-11 items-center justify-center rounded-lg ${stat.bg}`}
+                whileHover={{ rotate: 10 }}
+              >
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
-              </div>
+              </motion.div>
             </div>
           </motion.div>
         ))}
       </motion.div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <motion.div
+          className="lg:col-span-2"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+        >
           <div className="glass-card">
             <div className="flex items-center justify-between border-b border-border p-4">
               <h2 className="text-sm font-semibold uppercase tracking-wider">Recent Investigations</h2>
@@ -64,30 +117,45 @@ export default function Dashboard() {
               </Link>
             </div>
             <div className="divide-y divide-border">
-              {mockInvestigations.map((inv) => {
+              {mockInvestigations.map((inv, i) => {
                 const Icon = incidentIcons[inv.incidentType] || AlertTriangle;
                 return (
-                  <Link key={inv.id} to={`/investigation/${inv.id}`} className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                      <Icon className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono text-muted-foreground">{inv.id}</span>
-                        <SeverityBadge severity={inv.severity} />
+                  <motion.div
+                    key={inv.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 + i * 0.1 }}
+                  >
+                    <Link to={`/investigation/${inv.id}`} className="flex items-center gap-4 p-4 transition-all hover:bg-muted/50 hover:pl-5">
+                      <motion.div
+                        whileHover={{ rotate: 15 }}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted"
+                      >
+                        <Icon className="h-5 w-5 text-muted-foreground" />
+                      </motion.div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono text-muted-foreground">{inv.id}</span>
+                          <SeverityBadge severity={inv.severity} />
+                        </div>
+                        <p className="mt-0.5 truncate text-sm font-medium">{inv.equipment}</p>
+                        <p className="text-xs text-muted-foreground">{inv.labName}</p>
                       </div>
-                      <p className="mt-0.5 truncate text-sm font-medium">{inv.equipment}</p>
-                      <p className="text-xs text-muted-foreground">{inv.labName}</p>
-                    </div>
-                    <StatusBadge status={inv.status} />
-                  </Link>
+                      <StatusBadge status={inv.status} />
+                    </Link>
+                  </motion.div>
                 );
               })}
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="space-y-4">
+        <motion.div
+          className="space-y-4"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4 }}
+        >
           <div className="glass-card p-5">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Risk Distribution</h3>
             <div className="mt-4 space-y-3">
@@ -101,8 +169,13 @@ export default function Dashboard() {
                     <span className="text-muted-foreground">{r.label}</span>
                     <span className="font-mono font-medium">{r.count}</span>
                   </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-muted">
-                    <div className={`h-full rounded-full ${r.color}`} style={{ width: `${(r.count / r.total) * 100}%` }} />
+                  <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${r.color}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(r.count / r.total) * 100}%` }}
+                      transition={{ delay: 0.8, duration: 0.8, ease: 'easeOut' }}
+                    />
                   </div>
                 </div>
               ))}
@@ -112,17 +185,20 @@ export default function Dashboard() {
           <div className="glass-card p-5">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Quick Actions</h3>
             <div className="mt-3 space-y-2">
-              <Link to="/new-investigation" className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm transition-colors hover:bg-accent">
-                <Plus className="h-4 w-4 text-primary" />
-                Start New Investigation
-              </Link>
-              <Link to="/documents" className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm transition-colors hover:bg-accent">
-                <TrendingUp className="h-4 w-4 text-info" />
-                Upload Documents
-              </Link>
+              {[
+                { to: '/new-investigation', icon: Plus, label: 'Start New Investigation', color: 'text-primary' },
+                { to: '/documents', icon: TrendingUp, label: 'Upload Documents', color: 'text-info' },
+              ].map((action) => (
+                <motion.div key={action.to} whileHover={{ x: 4 }}>
+                  <Link to={action.to} className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm transition-colors hover:bg-accent">
+                    <action.icon className={`h-4 w-4 ${action.color}`} />
+                    {action.label}
+                  </Link>
+                </motion.div>
+              ))}
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
