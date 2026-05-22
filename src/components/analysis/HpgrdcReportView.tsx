@@ -51,11 +51,14 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
             ))}
           </tr>
           <tr>
-            {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => (
-              <td key={c} className={`border border-border p-1 text-center text-[10px] italic ${inv.classification===c?'bg-primary/20 text-primary':''}`}>
-                {c==='PFE' ? 'Process incident' : ''}
-              </td>
-            ))}
+            {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => {
+              const val = c === 'NM' ? (inv.nm || '') : c === 'PFE' ? (inv.pfe || '') : '';
+              return (
+                <td key={c} className={`border border-border p-1 text-center text-[10px] ${inv.classification===c?'bg-primary/20 text-primary':''}`} style={{wordBreak:'break-word'}}>
+                  {val}
+                </td>
+              );
+            })}
           </tr>
         </tbody>
       </table>
@@ -113,12 +116,11 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
       </>)}
 
       <H>WHY Tree Analysis</H>
-      <div className="space-y-3">
+      <div className="flex flex-col items-stretch">
         <WhyLevel label="Effect" items={[report.whyTree.effect]} />
-        <WhyConnector />
-        <WhyLevel label="Cause" items={causeItems} />
+        {causeItems.length ? <><WhyConnector /><WhyLevel label="Cause" items={causeItems} /></> : null}
         {report.whyTree.why?.length ? <><WhyConnector /><WhyLevel label="Why" items={report.whyTree.why} /></> : null}
-        {report.whyTree.deeper?.length ? <><WhyConnector /><WhyLevel label="Deeper Why" items={report.whyTree.deeper} /></> : null}
+        {report.whyTree.deeper?.length ? <><WhyConnector /><WhyLevel label="Deeper Cause" items={report.whyTree.deeper} /></> : null}
         {report.whyTree.rootWeakness?.length ? <><WhyConnector /><WhyLevel label="Root Weakness" items={report.whyTree.rootWeakness} /></> : null}
       </div>
 
@@ -216,15 +218,15 @@ function WhyLevel({ label, items }: { label: string; items: string[] }) {
   if (!items?.length) return null;
   return (
     <div className="overflow-hidden rounded border border-border">
-      <div className="bg-foreground/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-background">{label}</div>
-      <div className="grid gap-px bg-border" style={{gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`}}>
-        {items.map((x, i) => <div key={i} className="bg-background p-2 text-xs leading-relaxed">{x}</div>)}
+      <div className="bg-foreground/90 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-background">{label}</div>
+      <div className="divide-y divide-border">
+        {items.map((x, i) => <div key={i} className="bg-background p-2 text-center text-xs leading-relaxed">{x}</div>)}
       </div>
     </div>
   );
 }
 function WhyConnector() {
-  return <div className="mx-auto h-3 w-0.5 bg-border" />;
+  return <div className="mx-auto my-1 h-3 w-0.5 bg-foreground/60" />;
 }
 function KF({ label, items }: { label: string; items: string[] }) {
   return (
