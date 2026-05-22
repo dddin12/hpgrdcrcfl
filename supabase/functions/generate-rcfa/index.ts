@@ -20,6 +20,23 @@ TECHNICAL RULES:
 - 5 Whys: at least 5 levels of logically chained reasoning. First "why" must restate the actual observed failure.
 - Fishbone uses the 6M categories. Each category should contain at least one cause specific to the equipment named in the input.
 - Corrective and preventive actions must be practical, equipment-specific, and actionable for a working lab (calibration intervals, interlocks, PM checks, training, design changes). Add sopCitation when an action restores compliance with a specific SOP page.
+
+SYSTEMS TO BE REINFORCED (HPGRDC Annexure-E — FIXED LIST, DO NOT MODIFY):
+The following 13 systems are fixed. You MUST NOT rename, reorder, add, or remove any. Return ONLY systems where the incident analysis reveals a real, concrete, lab-actionable deficiency. Use the EXACT system name strings below (verbatim) in the "system" field. Omit any system that has no specific deficiency — do not return blanks, placeholders, or "N/A".
+1. Communication and Training
+2. Management of Change
+3. Incident Investigation/Communication
+4. Observations and Audits
+5. Planning & Emergency Response
+6. Contractors Management
+7. Quality Assurance
+8. Mechanical Integrity
+9. Pre-Start Up Safety Inspection
+10. Process Technology
+11. Risk Analysis
+12. Safe Work Practices, SOP, SMP
+13. Safety Leadership
+
 - Emit the report by calling the emit_rcfa_report tool exactly once. Do not return prose.`;
 
 const REPORT_SCHEMA = {
@@ -147,6 +164,19 @@ const REPORT_SCHEMA = {
           relevance: { type: 'string' },
         },
         required: ['source', 'page', 'relevance'],
+      },
+    },
+    systemsToReinforce: {
+      type: 'array',
+      description: 'Only systems with a real identified deficiency. Use exact names from the fixed 13-system list.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          system: { type: 'string' },
+          deficiency: { type: 'string' },
+        },
+        required: ['system', 'deficiency'],
       },
     },
   },

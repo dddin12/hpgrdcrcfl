@@ -45,6 +45,7 @@ export function buildFallbackReport(inv: Investigation): RcfaReport {
     })),
     procedureGaps: [],
     references: [],
+    systemsToReinforce: [],
     preventiveActions: [{ description: 'Define preventive actions after root cause is confirmed.' }],
     lessonsLearned: ['Complete AI-assisted analysis or manual review to populate lessons learned.'],
     assumptions: ['AI generation unavailable — this is a deterministic template draft.'],
