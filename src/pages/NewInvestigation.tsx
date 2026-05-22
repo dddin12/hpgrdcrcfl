@@ -194,27 +194,31 @@ export default function NewInvestigation() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className={labelClass}>Location of Incident *</label>
-              <input className={fieldClass} value={d.location} onChange={e=>upd('location', e.target.value)} required />
+              <input className={fieldClass} placeholder="Enter location" value={d.location} onChange={e=>upd('location', e.target.value)} required />
             </div>
             <div>
               <label className={labelClass}>Incident Number</label>
-              <input className={fieldClass} value={d.incidentNumber} onChange={e=>upd('incidentNumber', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter incident number" value={d.incidentNumber} onChange={e=>upd('incidentNumber', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Date of Incident *</label>
-              <input type="date" className={fieldClass} value={d.dateOfIncident} onChange={e=>upd('dateOfIncident', e.target.value)} required />
+              <input className={fieldClass} placeholder="dd-mm-yyyy" value={d.dateOfIncident} onChange={e=>upd('dateOfIncident', e.target.value)} required />
+              <p className={helpClass}>Format: dd-mm-yyyy</p>
             </div>
             <div>
               <label className={labelClass}>Time of Incident</label>
-              <input type="time" className={fieldClass} value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <input className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <p className={helpClass}>Format: hh:mm (24h)</p>
             </div>
             <div>
               <label className={labelClass}>Investigation Initiated (Date / Time)</label>
-              <input className={fieldClass} placeholder="e.g. 04 Sep 2020, 13:00" value={d.investigationInitiated} onChange={e=>upd('investigationInitiated', e.target.value)} />
+              <input className={fieldClass} placeholder="dd-mm-yyyy hh:mm" value={d.investigationInitiated} onChange={e=>upd('investigationInitiated', e.target.value)} />
+              <p className={helpClass}>Format: dd-mm-yyyy hh:mm</p>
             </div>
             <div>
               <label className={labelClass}>Report Submission Date</label>
-              <input type="date" className={fieldClass} value={d.reportSubmission} onChange={e=>upd('reportSubmission', e.target.value)} />
+              <input className={fieldClass} placeholder="dd-mm-yyyy" value={d.reportSubmission} onChange={e=>upd('reportSubmission', e.target.value)} />
+              <p className={helpClass}>Enter report submission date (dd-mm-yyyy)</p>
             </div>
           </div>
         </motion.section>
