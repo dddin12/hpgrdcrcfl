@@ -30,8 +30,13 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
   const CLASSES = ['FATAL','LWC','RWC','MTC','FAC','NM','PFE'] as const;
   const classHeader = CLASSES.map(c =>
     `<th class="cls ${inv.classification===c?'sel':''}">${c}</th>`).join('');
-  const classSubRow = CLASSES.map(c =>
-    `<td class="cls-sub ${inv.classification===c?'sel':''}">${c==='PFE' ? 'Process incident' : ''}</td>`).join('');
+  const classValueRow = CLASSES.map(c => {
+    let val = '';
+    if (c === 'NM') val = inv.nm || '';
+    else if (c === 'PFE') val = inv.pfe || '';
+    const selCls = inv.classification === c ? 'sel' : '';
+    return `<td class="cls-sub ${selCls}">${esc(val)}</td>`;
+  }).join('');
 
   const hpLogo = await toDataUrl(hpLogoUrl);
   const rndLogo = await toDataUrl(rndLogoUrl);
@@ -57,29 +62,25 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
     ? `<ol>${inv.facts.map(f => `<li>${esc(f)}</li>`).join('')}</ol>`
     : '<p style="color:#666;">—</p>';
 
-  const whyCells = (items: string[]) =>
-    items.map(x => `<td>${esc(x)}</td>`).join('');
-  const whyRow = (label: string, items: string[]) => {
-    if (!items?.length) return '';
-    const cols = items.length;
-    return `
-      <tr class="why-label"><th colspan="${cols}">${label}</th></tr>
-      <tr class="why-row">${whyCells(items)}</tr>`;
-  };
   const causeItems = [report.whyTree.cause.primary, report.whyTree.cause.secondary || ''].filter(Boolean);
+  const whyLevel = (label: string, items: string[]) => {
+    if (!items?.length) return '';
+    const content = items.map(x => `<div class="why-item">${esc(x)}</div>`).join('');
+    return `
+      <div class="why-node">
+        <div class="why-node-label">${label}</div>
+        <div class="why-node-body">${content}</div>
+      </div>
+      <div class="why-connector"></div>`;
+  };
   const whyTree = `
-    <table class="why">
-      <tr class="why-label"><th>Effect</th></tr>
-      <tr class="why-row"><td>${esc(report.whyTree.effect)}</td></tr>
-    </table>
-    <table class="why">
-      <tr class="why-label">${causeItems.map(() => '<th>Cause</th>').join('')}</tr>
-      <tr class="why-row">${whyCells(causeItems)}</tr>
-    </table>
-    ${report.whyTree.why?.length ? `<table class="why">${whyRow('Why', report.whyTree.why)}</table>` : ''}
-    ${report.whyTree.deeper?.length ? `<table class="why">${whyRow('Deeper Why', report.whyTree.deeper)}</table>` : ''}
-    ${report.whyTree.rootWeakness?.length ? `<table class="why">${whyRow('Root Weakness', report.whyTree.rootWeakness)}</table>` : ''}
-  `;
+    <div class="why-tree">
+      ${whyLevel('Effect', [report.whyTree.effect])}
+      ${whyLevel('Cause', causeItems)}
+      ${whyLevel('Why', report.whyTree.why || [])}
+      ${whyLevel('Deeper Cause', report.whyTree.deeper || [])}
+      ${whyLevel('Root Weakness', report.whyTree.rootWeakness || [])}
+    </div>`.replace(/<div class="why-connector"><\/div>\s*<\/div>/, '</div>');
 
   const kfBlock = (label: string, items: string[]) => `
     <table class="kf">
@@ -114,18 +115,19 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
   table.classification{table-layout:fixed}
   table.classification th.cls,table.classification td.cls-sub{text-align:center;padding:4px 2px;font-weight:700;width:14.28%;font-size:10pt}
   table.classification th.cls.sel{background:#000;color:#fff}
-  table.classification td.cls-sub{background:#fff;font-style:italic;font-weight:400;font-size:9pt;color:#000;min-height:14px}
-  table.classification td.cls-sub.sel{background:#000;color:#fff;font-style:italic;font-weight:600}
+  table.classification td.cls-sub{background:#fff;font-weight:400;font-size:9.5pt;color:#000;min-height:18px;height:22px}
+  table.classification td.cls-sub.sel{background:#000;color:#fff;font-weight:600}
   ol{margin:0 0 6px 22px;padding:0}
   ol li{margin-bottom:3px}
   ol.chron li{margin-bottom:4px;line-height:1.45}
   .row-line{padding:1px 0}
   .row-line + .row-line{border-top:1px dotted #999;margin-top:2px;padding-top:2px}
-  .why td,.why th{text-align:center}
-  .why th{background:#ddd}
-  .why{margin-bottom:2px}
-  .why .why-label th{background:#222;color:#fff;font-size:9.5pt;letter-spacing:.5px;text-transform:uppercase;padding:3px 6px}
-  .why .why-row td{font-size:10pt;padding:6px 8px}
+  .why-tree{display:flex;flex-direction:column;align-items:stretch;margin:4px 0 10px 0}
+  .why-node{border:1px solid #000;background:#fff}
+  .why-node-label{background:#000;color:#fff;text-align:center;font-size:9.5pt;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 6px;border-bottom:1px solid #000}
+  .why-node-body{padding:6px 8px;font-size:10pt;text-align:center}
+  .why-item + .why-item{border-top:1px dotted #666;margin-top:4px;padding-top:4px}
+  .why-connector{width:2px;height:14px;background:#000;margin:0 auto}
   .kf{margin-bottom:4px}
   .completion{display:grid;grid-template-columns:1fr 1fr;border:1px solid #000}
   .completion>div{border-right:1px solid #000;padding:24px 12px}
@@ -165,7 +167,7 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
 <table class="classification">
   <colgroup>${CLASSES.map(() => '<col style="width:14.28%"/>').join('')}</colgroup>
   <tr>${classHeader}</tr>
-  <tr>${classSubRow}</tr>
+  <tr>${classValueRow}</tr>
 </table>
 
 <table>

@@ -53,6 +53,7 @@ function canonicalInputs(inv: HpgrdcInvestigation): string {
   const sops = (inv.sopExcerpts || []).map(s => s.name).sort();
   const o = {
     incidentTitle: inv.incidentTitle, classification: inv.classification, numbers: inv.numbers,
+    nm: inv.nm, pfe: inv.pfe,
     injured: inv.injured, injuredName: inv.injuredName, ageSex: inv.ageSex,
     ticketDept: inv.ticketDept, companyContractor: inv.companyContractor,
     natureOfInjury: inv.natureOfInjury, reportedBy: inv.reportedBy,

@@ -5,10 +5,26 @@
  * Returns true when the string looks invalid. Empty strings are considered valid
  * here — callers filter those separately.
  */
+const BLOCKLIST = new Set([
+  'test','dummy','asdf','qwerty','hggg','xxxx','xxx','tbd','temp','lorem','abcd','1234','12345','aaaa','zzzz','foo','bar','baz',
+]);
+
 export function isLikelyGibberish(s: string): boolean {
   const t = (s || '').trim();
   if (!t) return false;
   if (t.length < 4) return true;
+  if (BLOCKLIST.has(t.toLowerCase())) return true;
+
+  // Token-level rule: any token >=5 chars with no vowel -> gibberish.
+  const tokens = t.split(/\s+/);
+  for (const tok of tokens) {
+    const letters = tok.replace(/[^a-zA-Z]/g, '');
+    if (letters.length >= 5) {
+      const v = (letters.match(/[aeiouAEIOU]/g) || []).length;
+      if (v === 0) return true;
+    }
+    if (BLOCKLIST.has(tok.toLowerCase())) return true;
+  }
 
   // Has whitespace AND at least one vowel — likely real text.
   const hasSpace = /\s/.test(t);
