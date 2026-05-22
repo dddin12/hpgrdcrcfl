@@ -1,32 +1,33 @@
 import { SYSTEMS_TO_REINFORCE } from '@/types/investigation';
 import type { HpgrdcInvestigation, HpgrdcAiReport } from '@/types/investigation';
+import { formatChronologyLine } from '@/utils/validation';
+import hpLogo from '@/assets/hp-logo.png';
+import rndLogo from '@/assets/rnd-logo.png';
 
 /**
  * On-screen HPGRDC report — same structure as the downloaded HTML, but in dark theme.
  * Title block: "Incident Investigation Report" / "HPGRDC."
  */
 export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestigation; report: HpgrdcAiReport }) {
+  const causeItems = [report.whyTree.cause.primary, report.whyTree.cause.secondary || ''].filter(Boolean);
+  const chronList = (inv.chronology || [])
+    .map(c => ({ time: (c.time || '').trim(), event: (c.event || '').trim() }))
+    .filter(c => c.event || c.time);
   return (
     <div className="rounded-lg border border-border bg-background p-6 text-sm">
-      <header className="mb-6 text-center">
-        <h1 className="text-xl font-bold tracking-wide">Incident Investigation Report</h1>
-        <p className="text-sm font-semibold text-muted-foreground">HPGRDC.</p>
+      <header className="mb-6 flex items-center justify-between gap-3 border-b border-border pb-4">
+        <img src={hpLogo} alt="HPCL" className="h-12 w-auto object-contain" />
+        <div className="flex-1 text-center">
+          <h1 className="text-xl font-bold tracking-wide">Incident Investigation Report</h1>
+          <p className="text-sm font-semibold text-muted-foreground">HPGRDC.</p>
+        </div>
+        <img src={rndLogo} alt="HP Green R&D Centre" className="h-12 w-auto object-contain" />
       </header>
 
       <H>Header</H>
       <table className="w-full border-collapse text-xs">
         <tbody>
           <Row label="Incident Title" value={inv.incidentTitle} />
-          <tr>
-            <th className="w-40 border border-border bg-muted/40 p-2 text-left font-semibold">Classification</th>
-            <td className="border border-border p-0">
-              <div className="grid grid-cols-7">
-                {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => (
-                  <div key={c} className={`border-r border-border p-2 text-center last:border-r-0 ${inv.classification===c?'bg-primary/20 font-bold text-primary':''}`}>{c}</div>
-                ))}
-              </div>
-            </td>
-          </tr>
           <Row label="Numbers" value={inv.numbers} />
           <tr>
             <th className="border border-border bg-muted/40 p-2 text-left font-semibold">Details of Injured</th>
@@ -38,6 +39,24 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
           <Row label="Company / Contractor" value={inv.companyContractor || '—'} />
           <Row label="Nature of Injury" value={inv.natureOfInjury || '—'} />
           <Row label="Incident Reported by" value={inv.reportedBy || '—'} />
+        </tbody>
+      </table>
+
+      <H>Classification</H>
+      <table className="w-full border-collapse text-xs" style={{ tableLayout: 'fixed' }}>
+        <tbody>
+          <tr>
+            {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => (
+              <th key={c} className={`border border-border p-2 text-center text-[11px] font-bold ${inv.classification===c?'bg-primary text-primary-foreground':'bg-muted/40'}`}>{c}</th>
+            ))}
+          </tr>
+          <tr>
+            {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => (
+              <td key={c} className={`border border-border p-1 text-center text-[10px] italic ${inv.classification===c?'bg-primary/20 text-primary':''}`}>
+                {c==='PFE' ? 'Process incident' : ''}
+              </td>
+            ))}
+          </tr>
         </tbody>
       </table>
 
@@ -56,8 +75,22 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
       <H>Investigation Information</H>
       <table className="w-full border-collapse text-xs">
         <tbody>
-          <Row label="Records Reviewed" value={(inv.recordsReviewed||[]).join(' / ') || '—'} />
-          <Row label="Persons Interacted" value={(inv.personsInteracted||[]).join(' / ') || '—'} />
+          <tr>
+            <th className="w-48 border border-border bg-muted/40 p-2 text-left font-semibold">Records Reviewed</th>
+            <td className="border border-border p-2">
+              {(inv.recordsReviewed||[]).filter(Boolean).length
+                ? (inv.recordsReviewed||[]).filter(Boolean).map((r,i)=><div key={i}>{r}</div>)
+                : '—'}
+            </td>
+          </tr>
+          <tr>
+            <th className="w-48 border border-border bg-muted/40 p-2 text-left font-semibold">Persons Interacted</th>
+            <td className="border border-border p-2">
+              {(inv.personsInteracted||[]).filter(Boolean).length
+                ? (inv.personsInteracted||[]).filter(Boolean).map((p,i)=><div key={i}>{p}</div>)
+                : '—'}
+            </td>
+          </tr>
           <Row label="Prior similar incident" value={inv.priorSimilar.occurred ? `Yes — ${inv.priorSimilar.notes||''}` : 'No'} />
         </tbody>
       </table>
@@ -65,10 +98,10 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
       <H>Summary of Incident</H>
       <p className="whitespace-pre-wrap border border-border p-3 text-xs leading-relaxed">{inv.summary}</p>
 
-      {inv.chronology.length > 0 && (<>
+      {chronList.length > 0 && (<>
         <H>Chronology of Events</H>
         <ol className="list-decimal space-y-1 border border-border p-3 pl-8 text-xs">
-          {inv.chronology.map((c, i) => <li key={i}>{c.time ? <span className="font-mono text-primary">{c.time}</span> : null} {c.event}</li>)}
+          {chronList.map((c, i) => <li key={i}>{formatChronologyLine(c.time, c.event)}</li>)}
         </ol>
       </>)}
 
@@ -80,18 +113,13 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
       </>)}
 
       <H>WHY Tree Analysis</H>
-      <div className="space-y-2">
-        <div className="border border-border bg-muted/40 p-2 text-center text-xs font-bold">Effect</div>
-        <div className="border border-border p-2 text-center text-xs">{report.whyTree.effect}</div>
-        <div className="border border-border bg-muted/40 p-2 text-center text-xs font-bold">Cause</div>
-        <div className="grid grid-cols-2 gap-px bg-border">
-          <div className="bg-background p-2 text-xs">{report.whyTree.cause.primary}</div>
-          <div className="bg-background p-2 text-xs">{report.whyTree.cause.secondary || '—'}</div>
-        </div>
-        <div className="border border-border bg-muted/40 p-2 text-center text-xs font-bold">Why</div>
-        <WhyRow items={report.whyTree.why} />
-        <WhyRow items={report.whyTree.deeper} />
-        <WhyRow items={report.whyTree.rootWeakness} />
+      <div className="space-y-3">
+        <WhyLevel label="Effect" items={[report.whyTree.effect]} />
+        <WhyConnector />
+        <WhyLevel label="Cause" items={causeItems} />
+        {report.whyTree.why?.length ? <><WhyConnector /><WhyLevel label="Why" items={report.whyTree.why} /></> : null}
+        {report.whyTree.deeper?.length ? <><WhyConnector /><WhyLevel label="Deeper Why" items={report.whyTree.deeper} /></> : null}
+        {report.whyTree.rootWeakness?.length ? <><WhyConnector /><WhyLevel label="Root Weakness" items={report.whyTree.rootWeakness} /></> : null}
       </div>
 
       <H>Key Factors Identified</H>
@@ -184,13 +212,19 @@ function Row({ label, value }: { label: string; value: any }) {
     </tr>
   );
 }
-function WhyRow({ items }: { items: string[] }) {
+function WhyLevel({ label, items }: { label: string; items: string[] }) {
   if (!items?.length) return null;
   return (
-    <div className="grid gap-px bg-border" style={{gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`}}>
-      {items.map((x, i) => <div key={i} className="bg-background p-2 text-xs">{x}</div>)}
+    <div className="overflow-hidden rounded border border-border">
+      <div className="bg-foreground/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-background">{label}</div>
+      <div className="grid gap-px bg-border" style={{gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`}}>
+        {items.map((x, i) => <div key={i} className="bg-background p-2 text-xs leading-relaxed">{x}</div>)}
+      </div>
     </div>
   );
+}
+function WhyConnector() {
+  return <div className="mx-auto h-3 w-0.5 bg-border" />;
 }
 function KF({ label, items }: { label: string; items: string[] }) {
   return (
