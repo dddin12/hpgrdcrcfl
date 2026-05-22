@@ -5,7 +5,7 @@ import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plu
 import { toast } from 'sonner';
 import { parseSopFiles } from '@/utils/parseSop';
 import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
-import { CLASSIFICATIONS } from '@/types/investigation';
+import { CLASSIFICATIONS, CLASSIFICATION_LEGEND } from '@/types/investigation';
 import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
 import { findInvalidRows } from '@/utils/validation';
 
@@ -38,6 +38,8 @@ export default function NewInvestigation() {
     incidentTitle: '',
     classification: '' as Classification | '',
     numbers: '',
+    nm: '',
+    pfe: '',
     company: 0, contractor: 0, visitors: 0,
     injuredName: '', ageSex: '', ticketDept: '', companyContractor: '',
     natureOfInjury: '', reportedBy: '',
@@ -96,6 +98,7 @@ export default function NewInvestigation() {
     const inv: HpgrdcInvestigation = {
       id, createdAt: new Date().toISOString(),
       incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
+      nm: d.nm.trim(), pfe: d.pfe.trim(),
       injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
       injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
       companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
@@ -146,6 +149,22 @@ export default function NewInvestigation() {
             <div>
               <label className={labelClass}>Numbers</label>
               <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="Enter number or Not applicable" />
+            </div>
+            <div>
+              <label className={labelClass}>NM (Near Miss)</label>
+              <input className={fieldClass} value={d.nm} onChange={e=>upd('nm', e.target.value)} placeholder="Not Applicable / Near Miss details" />
+            </div>
+            <div>
+              <label className={labelClass}>PFE (Process / Property / Fire Event)</label>
+              <input className={fieldClass} value={d.pfe} onChange={e=>upd('pfe', e.target.value)} placeholder="Process incident / Property damage / Equipment damage" />
+            </div>
+            <div className="md:col-span-2 rounded-md border border-border/60 bg-muted/30 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Classification legend</p>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground sm:grid-cols-2">
+                {CLASSIFICATION_LEGEND.map(l => (
+                  <div key={l.code}><span className="font-mono font-semibold text-foreground">{l.code}</span> — {l.meaning}</div>
+                ))}
+              </div>
             </div>
             <div className="md:col-span-2 grid grid-cols-3 gap-3">
               <div>
