@@ -51,3 +51,51 @@ export interface UploadedDocument {
   uploadedAt: string;
   size: string;
 }
+
+export interface SopExcerpt {
+  name: string;
+  text: string;
+}
+
+export interface RcfaActionItem {
+  description: string;
+  priority?: 'low' | 'medium' | 'high';
+  owner?: string;
+  dueWindow?: string;
+}
+
+export interface RcfaReport {
+  incidentSummary: string;
+  chronology: { time?: string; event: string }[];
+  immediateCause: string;
+  fiveWhys: { why: string; because: string }[];
+  fishbone: {
+    man: string[];
+    machine: string[];
+    method: string[];
+    material: string[];
+    measurement: string[];
+    environment: string[];
+  };
+  keyFactors: {
+    human: string[];
+    system: string[];
+    physical: string[];
+    organizational: string[];
+  };
+  barriers: {
+    existing: string[];
+    failed: string[];
+    missing: string[];
+  };
+  riskAssessment: {
+    severity: string;
+    likelihood: string;
+    escalation: string;
+  };
+  correctiveActions: RcfaActionItem[];
+  preventiveActions: RcfaActionItem[];
+  lessonsLearned: string[];
+  assumptions?: string[];
+  generatedBy: 'ai' | 'template';
+}
