@@ -1,16 +1,13 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, FileSearch, Plus, FileText, Shield, Settings } from 'lucide-react';
+import { LayoutDashboard, Plus, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import hpLogo from '@/assets/hp-logo.png';
 import rndLogo from '@/assets/rnd-logo.png';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/investigations', icon: FileSearch, label: 'Investigations' },
   { to: '/new-investigation', icon: Plus, label: 'New Investigation' },
-  { to: '/documents', icon: FileText, label: 'Documents' },
-  { to: '/risk-matrix', icon: Shield, label: 'Risk Matrix' },
 ];
 
 export default function AppSidebar() {

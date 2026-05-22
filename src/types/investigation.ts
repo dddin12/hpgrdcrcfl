@@ -54,7 +54,7 @@ export interface UploadedDocument {
 
 export interface SopExcerpt {
   name: string;
-  text: string;
+  pages: { page: number | string; text: string }[];
 }
 
 export interface RcfaActionItem {
@@ -62,6 +62,7 @@ export interface RcfaActionItem {
   priority?: 'low' | 'medium' | 'high';
   owner?: string;
   dueWindow?: string;
+  sopCitation?: string;
 }
 
 export interface RcfaReport {
@@ -78,10 +79,10 @@ export interface RcfaReport {
     environment: string[];
   };
   keyFactors: {
-    human: string[];
-    system: string[];
-    physical: string[];
-    organizational: string[];
+    human: (string | { text: string; sopCitation?: string })[];
+    system: (string | { text: string; sopCitation?: string })[];
+    physical: (string | { text: string; sopCitation?: string })[];
+    organizational: (string | { text: string; sopCitation?: string })[];
   };
   barriers: {
     existing: string[];
@@ -97,5 +98,7 @@ export interface RcfaReport {
   preventiveActions: RcfaActionItem[];
   lessonsLearned: string[];
   assumptions?: string[];
+  procedureGaps?: { issue: string; sopCitation: string }[];
+  references?: { source: string; page: string; quote: string; relevance: string }[];
   generatedBy: 'ai' | 'template';
 }
