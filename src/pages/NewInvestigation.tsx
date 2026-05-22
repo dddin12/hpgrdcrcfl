@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Upload, ArrowRight, Sparkles, X, FileText } from 'lucide-react';
 import { IncidentType, IncidentSeverity } from '@/types/investigation';
 import { toast } from 'sonner';
+import { parseSopFiles } from '@/utils/parseSop';
+import { mockInvestigations } from '@/data/mockData';
 
 const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'chemical-spill', label: 'Chemical Spill' },
@@ -67,10 +69,22 @@ export default function NewInvestigation() {
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast.success('Investigation created successfully');
-    navigate('/investigation/INV-2026-001');
+    const target = mockInvestigations[0];
+    if (attachments.length) {
+      const t = toast.loading('Parsing uploaded SOPs...');
+      try {
+        const excerpts = await parseSopFiles(attachments);
+        (target as any).sopExcerpts = excerpts;
+        toast.success(`Investigation created — ${excerpts.length} SOP excerpt(s) attached`, { id: t });
+      } catch {
+        toast.success('Investigation created (SOP parsing skipped)', { id: t });
+      }
+    } else {
+      toast.success('Investigation created successfully');
+    }
+    navigate(`/investigation/${target.id}`);
   };
 
   return (
