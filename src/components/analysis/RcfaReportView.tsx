@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, FileText, Clock, AlertOctagon, ListOrdered, Fish, Users, ShieldAlert, Gauge, Wrench, Sparkles, GraduationCap, Info } from 'lucide-react';
+import { ChevronDown, FileText, Clock, AlertOctagon, ListOrdered, Fish, Users, ShieldAlert, Gauge, Wrench, Sparkles, GraduationCap, Info, BookOpen, AlertTriangle } from 'lucide-react';
 import type { RcfaReport, RcfaActionItem } from '@/types/investigation';
 
 const FISH_COLORS: Record<string, string> = {
@@ -47,7 +47,14 @@ function ActionTable({ items }: { items: RcfaActionItem[] }) {
           {items.map((a, i) => (
             <tr key={i} className="border-b border-border/50 align-top">
               <td className="py-2 pr-3 font-mono text-muted-foreground">{i + 1}</td>
-              <td className="py-2 pr-3">{a.description}</td>
+              <td className="py-2 pr-3">
+                {a.description}
+                {a.sopCitation && (
+                  <div className="mt-1 inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                    <BookOpen className="h-2.5 w-2.5" /> {a.sopCitation}
+                  </div>
+                )}
+              </td>
               <td className="py-2 pr-3"><span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${colorFor(a.priority)}`}>{a.priority || '—'}</span></td>
               <td className="py-2 pr-3 text-muted-foreground">{a.owner || '—'}</td>
               <td className="py-2 text-muted-foreground">{a.dueWindow || '—'}</td>
@@ -169,6 +176,48 @@ export default function RcfaReportView({ report }: { report: RcfaReport }) {
       {report.assumptions?.length ? (
         <Section title="Assumptions / Information Gaps" icon={Info} defaultOpen={false}>
           <Bullets items={report.assumptions} />
+        </Section>
+      ) : null}
+
+      {report.procedureGaps?.length ? (
+        <Section title="Procedural Deviations Found in SOP / Manual" icon={AlertTriangle}>
+          <ul className="space-y-2">
+            {report.procedureGaps.map((g, i) => (
+              <li key={i} className="rounded-md border-l-2 border-destructive bg-destructive/5 p-3 text-sm">
+                <div>{g.issue}</div>
+                <div className="mt-1 inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] text-primary">
+                  <BookOpen className="h-2.5 w-2.5" /> {g.sopCitation}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      {report.references?.length ? (
+        <Section title="Document References" icon={BookOpen}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="py-2 pr-3 font-medium">Source</th>
+                  <th className="py-2 pr-3 font-medium">Page</th>
+                  <th className="py-2 pr-3 font-medium">Quote</th>
+                  <th className="py-2 font-medium">Why it matters</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.references.map((r, i) => (
+                  <tr key={i} className="border-b border-border/50 align-top">
+                    <td className="py-2 pr-3 font-medium">{r.source}</td>
+                    <td className="py-2 pr-3 font-mono text-primary">{r.page}</td>
+                    <td className="py-2 pr-3 italic text-muted-foreground">{r.quote ? `"${r.quote}"` : '—'}</td>
+                    <td className="py-2">{r.relevance}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Section>
       ) : null}
     </div>

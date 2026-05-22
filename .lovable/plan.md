@@ -1,55 +1,50 @@
-## Root cause of the "dummy output" problem
+## Goal
 
-1. `NewInvestigation.tsx` builds `formData` but on submit does `const target = mockInvestigations[0]` and navigates to that — your input is discarded.
-2. `InvestigationDetail.tsx` looks up the investigation from the same static `mockInvestigations` array, so it always shows HPLC / Dr. Sarah.
-3. The AI edge function `generate-rcfa` is wired correctly, but it receives that dummy investigation, so the AI output is technically correct... about HPLC.
-4. The 5 Whys / Fishbone / Cause Tree / Risk / Corrective Actions tabs render hardcoded sample arrays from `mockData.ts` regardless of the current investigation.
+Make this a practical lab tool, not a demo. Three concrete changes:
 
-The AI pipeline itself is fine. We need to feed it real data and make the panels reflect it.
+1. Kill all dummy/mock content end-to-end.
+2. Reduce navigation to **Dashboard** and **New Investigation** only. Dashboard lists every real investigation with "View Report" and "New Investigation" actions.
+3. When SOPs/manuals are attached, the AI must cite them by **document name + page number** (e.g. "SOP-LAB-12, p.4: pre-start checklist not followed") wherever a deviation, gap, or negligence is identified.
 
 ## Changes
 
-### 1. New in-memory + localStorage store — `src/data/investigationStore.ts`
-- `saveInvestigation(inv)`, `getInvestigation(id)`, `listInvestigations()`.
-- Persists to `localStorage` so refresh keeps the record; merges with `mockInvestigations` for the list views.
+### 1. Remove dummy data and unused pages
+- Delete `src/data/mockData.ts` usage everywhere. Replace `mockInvestigations` references with the real store.
+- Remove routes and files: `Documents.tsx`, `RiskMatrix.tsx`, `Investigations.tsx` (dashboard now serves the list). Drop their entries from `App.tsx` and `AppSidebar.tsx`.
+- Sidebar nav becomes: **Dashboard**, **New Investigation**, **Settings** only.
+- `RiskAssessmentPanel`, `CauseTreePanel`, etc. stop importing mock data; if no `report`, they render the existing `EmptyAnalysisState`.
+- `getInvestigation` / `listInvestigations` no longer merge mock items — only user-created investigations from localStorage.
 
-### 2. `src/pages/NewInvestigation.tsx`
-- On submit, build a **real** `Investigation` object from `formData`:
-  - `id`: `INV-<yyyy>-<rand>`
-  - `createdAt`, `status: 'in-progress'`, `riskScore` derived from severity (low=4, medium=9, high=16, critical=25).
-  - Carry `sopExcerpts` from parsed attachments onto the saved investigation.
-- Validate required fields, save via store, then navigate to `/investigation/<newId>`.
-- Remove all references to `mockInvestigations[0]`.
+### 2. Dashboard becomes the single hub
+- Header: title + two buttons → **New Investigation**, and (when an investigation is selected) **Download Report**.
+- Body: one table/list of every saved investigation with columns: ID, Date, Equipment, Lab, Severity, Status, Actions (View, Download Report if report cached).
+- Empty state when no investigations exist: a clear "Start your first investigation" CTA.
+- Remove the "Risk Distribution" and "Quick Actions" side cards (they were demo filler).
 
-### 3. `src/pages/InvestigationDetail.tsx`
-- Resolve investigation via `getInvestigation(id)` first, fall back to mock list only if not found.
-- Pass the resolved `report` (when present) into the analysis tabs so they reflect real AI output. Add an empty state on each tab telling the user to click "Generate RCFA Report" when no report is cached.
+### 3. SOP / manual page-level citations
+- Update `src/utils/parseSop.ts` to keep **per-page text** instead of one flat blob:
+  - PDF: store `{ name, pages: [{ page: 1, text: "..." }, ...] }`, up to 15 pages, ~600 chars/page.
+  - DOCX/TXT: chunk by ~1500 chars and label as `section 1`, `section 2`, … (DOCX has no real pages from mammoth).
+- Update `src/types/investigation.ts` `SopExcerpt` to `{ name: string; pages: { page: number | string; text: string }[] }`.
+- Update edge function `supabase/functions/generate-rcfa/index.ts`:
+  - Send the per-page chunks to the model with explicit labels: `"[SOP: <name>] Page <n>: <text>"`.
+  - Tighten the system prompt: *"Whenever a deviation, procedural gap, missed step, or negligence is identified, you MUST cite the exact source as `<document name>, p.<page>` (or `section <n>` if no page). Never invent page numbers. If no SOP supports a finding, say `No SOP reference available` instead of guessing."*
+  - Extend the JSON schema with a `references: { source: string; page: string; quote: string; relevance: string }[]` field, plus an optional `sopCitation` string on each finding in `keyFactors`, `correctiveActions`, and `procedureGaps`.
+- `RcfaReportView.tsx` + the printable `generateReport.ts`: render the citation inline next to the finding (small monospace badge), and add a "Document References" section listing every cited page.
 
-### 4. Analysis panels — make them data-driven
-- `FiveWhysPanel`, `FishbonePanel`, `CauseTreePanel`, `RiskAssessmentPanel`, `CorrectiveActionsPanel`:
-  - Accept an optional `report?: RcfaReport` prop.
-  - If `report` is provided, render from `report.fiveWhys`, `report.fishbone`, `report.correctiveActions`, `report.riskAssessment`, and a cause-tree built from `keyFactors` + `fiveWhys`.
-  - If no report yet, render a clean empty state ("Generate the RCFA report to populate this view") — no Dr. Sarah / HPLC dummy content.
-- Keep the existing colorful/responsive visual styling; only swap the data source.
-
-### 5. `src/pages/Investigations.tsx` and `src/pages/Dashboard.tsx`
-- Use `listInvestigations()` (user-created + mock) so newly created cases appear and the dashboard stats reflect real input. Mock items stay as historical examples.
-
-### 6. Edge function `generate-rcfa` — small hardening
-- Pass `contributingCauses`, `rootCause`, `immeditateCause`, and `correctiveActions[]` through to the prompt when present so AI grounds on every field the user gave.
-- Tighten the system prompt: "Ground every section strictly in the supplied investigation fields and SOP excerpts. Never invent equipment models, personnel names, timestamps, or chemicals not present in the input. If a field is empty, mark it explicitly under assumptions."
-- Bump default model to `google/gemini-2.5-pro` for higher-quality, less generic output (single call, still cheap on this flow).
-
-### 7. `src/utils/generateReport.ts`
-- Already renders from the cached `RcfaReport`. Verify the header pulls live investigation fields (lab name, equipment, operator, date) from the argument — no hardcoded HPLC/Sarah strings remain.
+### 4. Investigation detail page
+- Keep AI generation flow (one-shot Gemini 2.5 Pro) and caching. Tabs stay, but all panels are already report-driven after the previous change.
+- "Download Report" stays. "Regenerate" stays behind a confirm dialog.
+- Remove any leftover sample/demo tab content.
 
 ## Files
 
-- New: `src/data/investigationStore.ts`
-- Modified: `src/pages/NewInvestigation.tsx`, `src/pages/InvestigationDetail.tsx`, `src/pages/Investigations.tsx`, `src/pages/Dashboard.tsx`, `src/components/analysis/FiveWhysPanel.tsx`, `src/components/analysis/FishbonePanel.tsx`, `src/components/analysis/CauseTreePanel.tsx`, `src/components/analysis/RiskAssessmentPanel.tsx`, `src/components/analysis/CorrectiveActionsPanel.tsx`, `src/utils/generateReport.ts`, `supabase/functions/generate-rcfa/index.ts`
+- **Delete**: `src/data/mockData.ts`, `src/pages/Documents.tsx`, `src/pages/RiskMatrix.tsx`, `src/pages/Investigations.tsx`
+- **Modify**: `src/App.tsx`, `src/components/layout/AppSidebar.tsx`, `src/pages/Dashboard.tsx`, `src/pages/NewInvestigation.tsx`, `src/pages/InvestigationDetail.tsx`, `src/data/investigationStore.ts`, `src/types/investigation.ts`, `src/utils/parseSop.ts`, `src/utils/generateReport.ts`, `src/utils/fallbackReport.ts`, `src/components/analysis/RcfaReportView.tsx`, all `src/components/analysis/*Panel.tsx` (drop mock imports)
+- **Modify**: `supabase/functions/generate-rcfa/index.ts` (per-page prompt + citation requirement + schema)
 
 ## Out of scope
 
-- Database persistence (localStorage is enough for this internal tool).
-- Auth / multi-user.
+- Cross-device persistence (still localStorage — this is an internal pilot).
+- OCR for scanned PDFs (text-layer PDFs only, same as today).
 - Editing investigations after creation.

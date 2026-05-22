@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileSearch, GitBranch, BarChart3, Shield, FileDown, Lightbulb, ChevronRight, Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { getInvestigation } from '@/data/investigationStore';
-import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
 import FiveWhysPanel from '@/components/analysis/FiveWhysPanel';
 import FishbonePanel from '@/components/analysis/FishbonePanel';
@@ -38,7 +37,16 @@ export default function InvestigationDetail() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<RcfaReport | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const investigation = getInvestigation(id) || mockInvestigations[0];
+  const investigation = getInvestigation(id);
+
+  if (!investigation) {
+    return (
+      <div className="mx-auto max-w-xl py-16 text-center">
+        <h1 className="text-lg font-semibold">Investigation not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">This investigation does not exist or was cleared from local storage.</p>
+      </div>
+    );
+  }
 
   const handleExport = async () => {
     if (!report) {

@@ -1,24 +1,25 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const SYSTEM_PROMPT = `You are a senior industrial R&D safety investigator producing an audit-ready Root Cause Failure Analysis (RCFA).
+const SYSTEM_PROMPT = `You are a senior industrial R&D safety investigator producing an audit-ready Root Cause Failure Analysis (RCFA) intended for working lab engineers and HSE staff. Write plainly, technically, and practically — no fluff, no generic safety platitudes.
 
 ABSOLUTE GROUNDING RULES:
-- Ground every section strictly in the supplied investigation fields and SOP excerpts.
-- NEVER invent equipment models, personnel names, timestamps, chemicals, instrument numbers, lab names, or document IDs that are not explicitly present in the input.
-- If a fact is not supplied, mark it explicitly under "assumptions" (e.g. "Operator certification status not provided — assumed current").
-- Do not import details from unrelated example incidents (no HPLC, no Dr. Sarah Chen, no Agilent, no generic chemical-spill language) unless those exact strings appear in the input.
+- Ground every section strictly in the supplied investigation fields and SOP/manual excerpts.
+- NEVER invent equipment models, people, timestamps, chemicals, instrument numbers, lab names, or document IDs that are not explicitly present in the input.
+- If a fact is not supplied, mark it explicitly under "assumptions" (e.g. "Operator certification status not provided").
 - Reflect the user's actual incident type, equipment, lab, operator, severity, description, and immediate response in every section.
 
+DOCUMENT CITATION RULES (CRITICAL):
+- SOP/manual excerpts are provided as "[<document name>] page <n>: <text>" (or "section <n>" for non-paginated docs).
+- Whenever a deviation, missing step, procedural gap, negligence, or barrier failure is identified, you MUST cite the source inline using the exact format: "<document name>, p.<n>" (or "section <n>"). Example: "Operator did not perform the warm-up checklist (SOP-DYNO-003, p.4)."
+- Cite the page only when that page actually supports the finding. Do not fabricate page numbers. If no SOP excerpt supports a finding, write "(no SOP reference available)" — do not guess.
+- Populate the references[] array with every page you cite: { source, page, quote (short — 1 short sentence from that page), relevance }.
+- Populate procedureGaps[] with concrete missed/violated steps, each with a sopCitation in the same format.
+
 TECHNICAL RULES:
-- Be technical, specific, and concise. No generic safety advice, no filler.
-- Focus on incident sequence, deviation from intended state, failed/missing barriers, procedural gaps, human factors, physical causes, and system weaknesses.
-- 5 Whys must contain at least 5 levels of logically chained reasoning (each "because" becomes the subject of the next "why"). The first "why" must restate the actual observed failure from the input.
-- Fishbone uses the 6M categories (Man, Machine, Method, Material, Measurement, Environment). Each category should contain at least one cause specific to the equipment named in the input.
-- Separate Key Factors into Human / System / Physical / Organizational.
-- Barrier analysis must split into existing, failed, and missing safeguards. Existing barriers should reference what the operator's immediate response or SOPs imply was in place.
-- If SOP/manual excerpts are provided, use them ONLY to identify procedural deviations, missing checks, and named safeguards. Do not summarize the SOP. Do not quote long passages verbatim.
-- Corrective and preventive actions must be practical, equipment-specific, and reference engineering controls, calibration, PM intervals, interlocks, training, or design changes appropriate to the equipment in the input.
-- Tone: professional, audit-ready.
+- Be technical, specific, concise. Focus on: incident sequence, deviation from intended state, failed/missing barriers, procedural gaps, human factors, physical causes, system weaknesses.
+- 5 Whys: at least 5 levels of logically chained reasoning. First "why" must restate the actual observed failure.
+- Fishbone uses the 6M categories. Each category should contain at least one cause specific to the equipment named in the input.
+- Corrective and preventive actions must be practical, equipment-specific, and actionable for a working lab (calibration intervals, interlocks, PM checks, training, design changes). Add sopCitation when an action restores compliance with a specific SOP page.
 - Emit the report by calling the emit_rcfa_report tool exactly once. Do not return prose.`;
 
 const REPORT_SCHEMA = {
@@ -100,6 +101,7 @@ const REPORT_SCHEMA = {
           priority: { type: 'string', enum: ['low', 'medium', 'high'] },
           owner: { type: 'string' },
           dueWindow: { type: 'string' },
+          sopCitation: { type: 'string' },
         },
         required: ['description'],
       },
@@ -114,12 +116,39 @@ const REPORT_SCHEMA = {
           priority: { type: 'string', enum: ['low', 'medium', 'high'] },
           owner: { type: 'string' },
           dueWindow: { type: 'string' },
+          sopCitation: { type: 'string' },
         },
         required: ['description'],
       },
     },
     lessonsLearned: { type: 'array', items: { type: 'string' } },
     assumptions: { type: 'array', items: { type: 'string' } },
+    procedureGaps: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          issue: { type: 'string' },
+          sopCitation: { type: 'string' },
+        },
+        required: ['issue', 'sopCitation'],
+      },
+    },
+    references: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          source: { type: 'string' },
+          page: { type: 'string' },
+          quote: { type: 'string' },
+          relevance: { type: 'string' },
+        },
+        required: ['source', 'page', 'relevance'],
+      },
+    },
   },
   required: [
     'incidentSummary', 'chronology', 'immediateCause', 'fiveWhys',
@@ -127,6 +156,21 @@ const REPORT_SCHEMA = {
     'correctiveActions', 'preventiveActions', 'lessonsLearned',
   ],
 };
+
+function formatSopBlock(sopExcerpts: any[]): string {
+  if (!sopExcerpts.length) return '\n\n(No SOP / manual provided. Do not invent citations — set procedureGaps and references to empty arrays.)';
+  const parts: string[] = [];
+  for (const s of sopExcerpts) {
+    const name = String(s?.name || 'document').slice(0, 160);
+    const pages = Array.isArray(s?.pages) ? s.pages : [];
+    for (const p of pages) {
+      const label = typeof p?.page === 'number' ? `page ${p.page}` : String(p?.page || 'section');
+      const text = String(p?.text || '').slice(0, 1200);
+      if (text) parts.push(`[${name}] ${label}: ${text}`);
+    }
+  }
+  return '\n\nSOP / MANUAL EXCERPTS (cite using "<document name>, p.<n>" or "<document name>, section <n>"):\n' + parts.join('\n\n');
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -148,11 +192,7 @@ Deno.serve(async (req: Request) => {
 
     const investigation = body.investigation;
     const sopExcerpts = Array.isArray(body.sopExcerpts) ? body.sopExcerpts.slice(0, 3) : [];
-
-    const sopBlock = sopExcerpts.length
-      ? '\n\nSOP / MANUAL EXCERPTS (use only for procedural-deviation analysis):\n' +
-        sopExcerpts.map((s: any) => `--- ${String(s.name).slice(0, 120)} ---\n${String(s.text).slice(0, 8000)}`).join('\n\n')
-      : '\n\n(No SOP/manual provided.)';
+    const sopBlock = formatSopBlock(sopExcerpts);
 
     const userMsg = `INVESTIGATION DATA (JSON):\n${JSON.stringify({
       id: investigation.id,
@@ -169,7 +209,7 @@ Deno.serve(async (req: Request) => {
       rootCauseHypothesis: investigation.rootCause,
       existingCorrectiveActions: investigation.correctiveActions,
       riskScore: investigation.riskScore,
-    }, null, 2)}${sopBlock}\n\nProduce the RCFA report by calling emit_rcfa_report. Remember: every detail must come from the JSON above or the SOP excerpts — do not invent equipment, people, or facts.`;
+    }, null, 2)}${sopBlock}\n\nProduce the RCFA report by calling emit_rcfa_report. Cite SOP/manual pages exactly as instructed. Do not invent any fact.`;
 
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -187,7 +227,7 @@ Deno.serve(async (req: Request) => {
           type: 'function',
           function: {
             name: 'emit_rcfa_report',
-            description: 'Emit the structured 11-section RCFA report.',
+            description: 'Emit the structured 11-section RCFA report with SOP citations.',
             parameters: REPORT_SCHEMA,
           },
         }],

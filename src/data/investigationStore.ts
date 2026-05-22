@@ -1,5 +1,4 @@
 import type { Investigation, SopExcerpt } from '@/types/investigation';
-import { mockInvestigations } from './mockData';
 
 const KEY = 'rcfa.investigations.v1';
 
@@ -37,13 +36,11 @@ export function saveInvestigation(inv: StoredInvestigation): StoredInvestigation
 export function getInvestigation(id: string | undefined): StoredInvestigation | undefined {
   if (!id) return undefined;
   const items = readAll();
-  return items.find(i => i.id === id) || (mockInvestigations as StoredInvestigation[]).find(i => i.id === id);
+  return items.find(i => i.id === id);
 }
 
 export function listInvestigations(): StoredInvestigation[] {
-  const stored = readAll();
-  const mockOnly = (mockInvestigations as StoredInvestigation[]).filter(m => !stored.some(s => s.id === m.id));
-  return [...stored, ...mockOnly];
+  return readAll();
 }
 
 export function newInvestigationId(): string {

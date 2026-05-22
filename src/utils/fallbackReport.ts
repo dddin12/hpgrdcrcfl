@@ -43,6 +43,8 @@ export function buildFallbackReport(inv: Investigation): RcfaReport {
     correctiveActions: (inv.correctiveActions ?? []).map(a => ({
       description: a.description, priority: a.priority, owner: a.assignee, dueWindow: a.dueDate,
     })),
+    procedureGaps: [],
+    references: [],
     preventiveActions: [{ description: 'Define preventive actions after root cause is confirmed.' }],
     lessonsLearned: ['Complete AI-assisted analysis or manual review to populate lessons learned.'],
     assumptions: ['AI generation unavailable — this is a deterministic template draft.'],
