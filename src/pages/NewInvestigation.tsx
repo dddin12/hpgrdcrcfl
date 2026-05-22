@@ -323,10 +323,11 @@ export default function NewInvestigation() {
   );
 }
 
-function RepeatableList({ label, items, onChange, placeholder }: { label: string; items: string[]; onChange: (v: string[])=>void; placeholder?: string }) {
+function RepeatableList({ label, items, onChange, placeholder, help }: { label: string; items: string[]; onChange: (v: string[])=>void; placeholder?: string; help?: string }) {
   return (
     <div>
       <label className={labelClass}>{label}</label>
+      {help && <p className={helpClass + ' mb-2'}>{help}</p>}
       <div className="space-y-2">
         {items.map((v, i) => (
           <div key={i} className="flex gap-2">
