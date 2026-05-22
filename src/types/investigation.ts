@@ -79,10 +79,10 @@ export interface RcfaReport {
     environment: string[];
   };
   keyFactors: {
-    human: (string | { text: string; sopCitation?: string })[];
-    system: (string | { text: string; sopCitation?: string })[];
-    physical: (string | { text: string; sopCitation?: string })[];
-    organizational: (string | { text: string; sopCitation?: string })[];
+    human: string[];
+    system: string[];
+    physical: string[];
+    organizational: string[];
   };
   barriers: {
     existing: string[];
