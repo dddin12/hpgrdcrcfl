@@ -21,7 +21,7 @@ function renderActions(actions: RcfaReport['correctiveActions']): string {
     <tbody>${actions.map((a, i) => `
       <tr>
         <td style="font-family:monospace;">${i + 1}</td>
-        <td>${esc(a.description)}</td>
+        <td>${esc(a.description)}${a.sopCitation ? `<div style="margin-top:4px;display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:10px;">📖 ${esc(a.sopCitation)}</div>` : ''}</td>
         <td>${a.priority ? `<span class="badge badge-${a.priority}">${a.priority.toUpperCase()}</span>` : '—'}</td>
         <td>${esc(a.owner || '—')}</td>
         <td>${esc(a.dueWindow || '—')}</td>
@@ -156,6 +156,13 @@ ${(['human','system','physical','organizational'] as const).map(k => `<div class
 <div class="section"><div class="section-title">11. Lessons Learned</div>${renderList(report.lessonsLearned)}</div>
 
 ${report.assumptions?.length ? `<div class="section"><div class="section-title">Assumptions / Information Gaps</div>${renderList(report.assumptions)}</div>` : ''}
+
+${report.procedureGaps?.length ? `<div class="section"><div class="section-title">Procedural Deviations Found in SOP / Manual</div>
+<ul style="list-style:none;padding:0;margin:0;">${report.procedureGaps.map(g => `<li style="border-left:3px solid #dc2626;background:#fef2f2;padding:10px 12px;margin-bottom:8px;border-radius:0 6px 6px 0;font-size:13px;"><div>${esc(g.issue)}</div><div style="margin-top:4px;display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:10px;">📖 ${esc(g.sopCitation)}</div></li>`).join('')}</ul></div>` : ''}
+
+${report.references?.length ? `<div class="section"><div class="section-title">Document References</div>
+<table><thead><tr><th>Source</th><th>Page</th><th>Quote</th><th>Why it matters</th></tr></thead>
+<tbody>${report.references.map(r => `<tr><td style="font-weight:600;">${esc(r.source)}</td><td style="font-family:monospace;color:#d4a017;">${esc(r.page)}</td><td style="font-style:italic;color:#555;">${r.quote ? `"${esc(r.quote)}"` : '—'}</td><td>${esc(r.relevance)}</td></tr>`).join('')}</tbody></table></div>` : ''}
 
 <div class="footer">
   <div class="footer-logos"><img src="${hpLogo}" alt="HP"/><img src="${rndLogo}" alt="RnD"/></div>
