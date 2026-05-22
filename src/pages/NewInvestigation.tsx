@@ -7,10 +7,12 @@ import { parseSopFiles } from '@/utils/parseSop';
 import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
 import { CLASSIFICATIONS } from '@/types/investigation';
 import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
+import { findInvalidRows } from '@/utils/validation';
 
 const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition";
 const labelClass = "block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1";
 const sectionTitle = "text-xs font-bold uppercase tracking-[0.2em] text-primary border-b border-border pb-2 mb-4";
+const helpClass = "mt-1 text-[10px] italic text-muted-foreground";
 
 function fmtSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB'; }
 
