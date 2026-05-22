@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, FileText, Clock, AlertOctagon, ListOrdered, Fish, Users, ShieldAlert, Gauge, Wrench, Sparkles, GraduationCap, Info, BookOpen, AlertTriangle } from 'lucide-react';
+import { ChevronDown, FileText, Clock, AlertOctagon, ListOrdered, Fish, Users, ShieldAlert, Gauge, Wrench, Sparkles, GraduationCap, Info, BookOpen, AlertTriangle, ClipboardList } from 'lucide-react';
 import type { RcfaReport, RcfaActionItem } from '@/types/investigation';
+import { SYSTEMS_TO_REINFORCE } from '@/types/investigation';
 
 const FISH_COLORS: Record<string, string> = {
   man: 'border-rose-500/40 bg-rose-500/5',
@@ -161,15 +162,48 @@ export default function RcfaReportView({ report }: { report: RcfaReport }) {
         </div>
       </Section>
 
-      <Section title="9. Corrective Actions" icon={Wrench}>
+      <Section title="9. Systems to be Reinforced" icon={ClipboardList}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-left text-muted-foreground">
+              <tr className="border-b border-border">
+                <th className="py-2 pr-3 font-medium w-14">Sr No.</th>
+                <th className="py-2 pr-3 font-medium">System</th>
+                <th className="py-2 font-medium">Deficiency</th>
+              </tr>
+            </thead>
+            <tbody>
+              {SYSTEMS_TO_REINFORCE.map((sys, i) => {
+                const match = (report.systemsToReinforce || []).find(
+                  s => (s.system || '').trim().toLowerCase() === sys.toLowerCase()
+                );
+                const def = match?.deficiency?.trim();
+                return (
+                  <tr key={sys} className="border-b border-border/50 align-top">
+                    <td className="py-2 pr-3 font-mono text-muted-foreground">{i + 1}</td>
+                    <td className="py-2 pr-3 font-medium">{sys}</td>
+                    <td className="py-2">
+                      {def
+                        ? <span className="text-sm">{def}</span>
+                        : <span className="text-xs italic text-muted-foreground">No specific deficiency identified.</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section title="10. Corrective Actions" icon={Wrench}>
         <ActionTable items={report.correctiveActions} />
       </Section>
 
-      <Section title="10. Preventive Actions" icon={Sparkles}>
+      <Section title="11. Preventive Actions" icon={Sparkles}>
         <ActionTable items={report.preventiveActions} />
       </Section>
 
-      <Section title="11. Lessons Learned" icon={GraduationCap}>
+      <Section title="12. Lessons Learned" icon={GraduationCap}>
         <Bullets items={report.lessonsLearned} />
       </Section>
 

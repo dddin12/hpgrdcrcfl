@@ -1,4 +1,5 @@
 import { Investigation, RcfaReport } from '@/types/investigation';
+import { SYSTEMS_TO_REINFORCE } from '@/types/investigation';
 import hpLogoUrl from '@/assets/hp-logo.png';
 import rndLogoUrl from '@/assets/rnd-logo.png';
 
@@ -151,9 +152,24 @@ ${(['human','system','physical','organizational'] as const).map(k => `<div class
   <div class="risk-box"><div class="risk-label">Escalation Potential</div><div class="risk-value">${esc(report.riskAssessment.escalation)}</div></div>
 </div></div>
 
-<div class="section"><div class="section-title">9. Corrective Actions</div>${renderActions(report.correctiveActions)}</div>
-<div class="section"><div class="section-title">10. Preventive Actions</div>${renderActions(report.preventiveActions)}</div>
-<div class="section"><div class="section-title">11. Lessons Learned</div>${renderList(report.lessonsLearned)}</div>
+<div class="section"><div class="section-title">9. Systems to be Reinforced</div>
+<table>
+  <thead><tr><th style="width:60px;">Sr No.</th><th>System</th><th>Deficiency</th></tr></thead>
+  <tbody>
+    ${SYSTEMS_TO_REINFORCE.map((sys, i) => {
+      const match = (report.systemsToReinforce || []).find(
+        s => (s.system || '').trim().toLowerCase() === sys.toLowerCase()
+      );
+      const def = (match?.deficiency || '').trim();
+      return `<tr><td style="font-family:monospace;">${i + 1}</td><td style="font-weight:600;">${esc(sys)}</td><td>${esc(def)}</td></tr>`;
+    }).join('')}
+  </tbody>
+</table>
+</div>
+
+<div class="section"><div class="section-title">10. Corrective Actions</div>${renderActions(report.correctiveActions)}</div>
+<div class="section"><div class="section-title">11. Preventive Actions</div>${renderActions(report.preventiveActions)}</div>
+<div class="section"><div class="section-title">12. Lessons Learned</div>${renderList(report.lessonsLearned)}</div>
 
 ${report.assumptions?.length ? `<div class="section"><div class="section-title">Assumptions / Information Gaps</div>${renderList(report.assumptions)}</div>` : ''}
 

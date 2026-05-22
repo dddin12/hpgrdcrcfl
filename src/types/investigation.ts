@@ -100,5 +100,22 @@ export interface RcfaReport {
   assumptions?: string[];
   procedureGaps?: { issue: string; sopCitation: string }[];
   references?: { source: string; page: string; quote: string; relevance: string }[];
+  systemsToReinforce?: { system: string; deficiency: string }[];
   generatedBy: 'ai' | 'template';
 }
+
+export const SYSTEMS_TO_REINFORCE: string[] = [
+  'Communication and Training',
+  'Management of Change',
+  'Incident Investigation/Communication',
+  'Observations and Audits',
+  'Planning & Emergency Response',
+  'Contractors Management',
+  'Quality Assurance',
+  'Mechanical Integrity',
+  'Pre-Start Up Safety Inspection',
+  'Process Technology',
+  'Risk Analysis',
+  'Safe Work Practices, SOP, SMP',
+  'Safety Leadership',
+];
