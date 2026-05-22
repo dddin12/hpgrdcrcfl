@@ -1,254 +1,321 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Upload, ArrowRight, Sparkles, X, FileText } from 'lucide-react';
-import { IncidentType, IncidentSeverity } from '@/types/investigation';
+import { motion } from 'framer-motion';
+import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseSopFiles } from '@/utils/parseSop';
-import { saveInvestigation, newInvestigationId, riskScoreFromSeverity } from '@/data/investigationStore';
-import type { Investigation } from '@/types/investigation';
+import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
+import { CLASSIFICATIONS } from '@/types/investigation';
+import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
 
-const incidentTypes: { value: IncidentType; label: string }[] = [
-  { value: 'chemical-spill', label: 'Chemical Spill' },
-  { value: 'equipment-failure', label: 'Equipment Failure' },
-  { value: 'fire', label: 'Fire / Thermal Event' },
-  { value: 'electrical', label: 'Electrical Incident' },
-  { value: 'biological', label: 'Biological Hazard' },
-  { value: 'radiation', label: 'Radiation Exposure' },
-  { value: 'ergonomic', label: 'Ergonomic Injury' },
-  { value: 'other', label: 'Other' },
-];
+const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition";
+const labelClass = "block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1";
+const sectionTitle = "text-xs font-bold uppercase tracking-[0.2em] text-primary border-b border-border pb-2 mb-4";
 
-const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all duration-200";
-const labelClass = "block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5";
+function fmtSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB'; }
 
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
-const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+function readImage(file: File): Promise<Photograph> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve({ name: file.name, dataUrl: String(r.result) });
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 }
+
+const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
 
 export default function NewInvestigation() {
   const navigate = useNavigate();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [attachments, setAttachments] = useState<File[]>([]);
-  const [formData, setFormData] = useState({
-    labName: '',
-    equipment: '',
-    incidentType: '' as IncidentType,
-    severity: '' as IncidentSeverity,
-    description: '',
-    operator: '',
-    dateTime: '',
-    immediateResponse: '',
+  const docRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [docs, setDocs] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<File[]>([]);
+
+  const [d, setD] = useState({
+    incidentTitle: '',
+    classification: '' as Classification | '',
+    numbers: '',
+    company: 0, contractor: 0, visitors: 0,
+    injuredName: '', ageSex: '', ticketDept: '', companyContractor: '',
+    natureOfInjury: '', reportedBy: '',
+    location: '', incidentNumber: '',
+    dateOfIncident: '', timeOfIncident: '',
+    investigationInitiated: '', reportSubmission: '',
+    priorOccurred: false, priorNotes: '',
+    summary: '',
   });
 
-  const update = (field: string, value: string) => setFormData(prev => ({ ...prev, [field]: value }));
+  const [records, setRecords] = useState<string[]>(['']);
+  const [persons, setPersons] = useState<string[]>(['']);
+  const [chronology, setChronology] = useState<{time: string; event: string}[]>([{time:'', event:''}]);
+  const [facts, setFacts] = useState<string[]>(['']);
 
-  const addFiles = (files: FileList | File[]) => {
-    const newFiles = Array.from(files);
-    const oversized = newFiles.filter(f => f.size > 20 * 1024 * 1024);
-    const valid = newFiles.filter(f => f.size <= 20 * 1024 * 1024);
-    if (oversized.length) toast.error(`${oversized.length} file(s) exceed 20 MB limit`);
-    if (valid.length) {
-      setAttachments(prev => [...prev, ...valid]);
-      toast.success(`${valid.length} file(s) attached`);
-    }
+  const upd = (k: keyof typeof d, v: any) => setD(p => ({...p, [k]: v}));
+
+  const addDocs = (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(f => f.size <= 20*1024*1024);
+    setDocs(p => [...p, ...arr]);
+  };
+  const addPhotos = (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(f => f.type.startsWith('image/') && f.size <= 5*1024*1024);
+    if (arr.length < Array.from(files).length) toast.error('Some photos skipped (must be images, max 5 MB each)');
+    setPhotos(p => [...p, ...arr]);
   };
 
-  const removeFile = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.labName || !formData.equipment || !formData.incidentType || !formData.severity || !formData.operator || !formData.dateTime || !formData.description) {
-      toast.error('Please fill in all required fields');
+    if (!d.incidentTitle || !d.classification || !d.location || !d.dateOfIncident || !d.summary) {
+      toast.error('Fill incident title, classification, location, date, and summary');
       return;
     }
-
     const id = newInvestigationId();
-    const investigation: Investigation & { sopExcerpts?: any[] } = {
-      id,
-      labName: formData.labName,
-      equipment: formData.equipment,
-      incidentType: formData.incidentType,
-      severity: formData.severity,
-      operator: formData.operator,
-      dateTime: formData.dateTime,
-      description: formData.description,
-      immediateResponse: formData.immediateResponse,
-      status: 'in-progress',
-      createdAt: new Date().toISOString(),
-      riskScore: riskScoreFromSeverity(formData.severity),
-    };
-
-    if (attachments.length) {
-      const t = toast.loading('Parsing uploaded SOPs...');
-      try {
-        const excerpts = await parseSopFiles(attachments);
-        investigation.sopExcerpts = excerpts;
-        toast.success(`Investigation created — ${excerpts.length} SOP excerpt(s) attached`, { id: t });
-      } catch {
-        toast.success('Investigation created (SOP parsing skipped)', { id: t });
-      }
-    } else {
-      toast.success('Investigation created successfully');
+    const t = toast.loading('Saving investigation...');
+    let sopExcerpts: any[] = [];
+    let photographs: Photograph[] = [];
+    try {
+      if (docs.length) sopExcerpts = await parseSopFiles(docs);
+      if (photos.length) photographs = await Promise.all(photos.map(readImage));
+    } catch (e) {
+      console.warn(e);
     }
-
-    saveInvestigation(investigation);
+    const inv: HpgrdcInvestigation = {
+      id, createdAt: new Date().toISOString(),
+      incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
+      injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
+      injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
+      companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
+      location: d.location, incidentNumber: d.incidentNumber,
+      dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
+      investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
+      recordsReviewed: records.map(r => r.trim()).filter(Boolean),
+      personsInteracted: persons.map(r => r.trim()).filter(Boolean),
+      priorSimilar: { occurred: d.priorOccurred, notes: d.priorNotes },
+      summary: d.summary,
+      chronology: chronology.filter(c => c.event.trim()),
+      facts: facts.map(f => f.trim()).filter(Boolean),
+      sopExcerpts, photographs,
+    };
+    saveInvestigation(inv);
+    toast.success('Investigation saved', { id: t });
     navigate(`/investigation/${id}`);
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6 flex items-center gap-3"
-      >
+    <div className="mx-auto max-w-4xl">
+      <motion.div initial={{opacity:0,y:-6}} animate={{opacity:1,y:0}} className="mb-6 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <AlertTriangle className="h-5 w-5 text-primary" />
+          <ClipboardList className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-xl font-bold">New Incident Investigation</h1>
-          <p className="text-sm text-muted-foreground">Enter incident details to begin root cause analysis</p>
+          <p className="text-sm text-muted-foreground">HPGRDC Incident Investigation Report — operator inputs</p>
         </div>
       </motion.div>
 
-      <motion.form
-        variants={container}
-        initial="hidden"
-        animate="show"
-        onSubmit={handleSubmit}
-        className="glass-card divide-y divide-border"
-      >
-        <motion.div variants={item} className="grid gap-5 p-6 md:grid-cols-2">
-          <div>
-            <label className={labelClass}>Lab Name</label>
-            <input className={fieldClass} placeholder="e.g. Analytical Chemistry Lab B" value={formData.labName} onChange={e => update('labName', e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelClass}>Equipment Involved</label>
-            <input className={fieldClass} placeholder="e.g. HPLC System — Agilent 1260" value={formData.equipment} onChange={e => update('equipment', e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelClass}>Incident Type</label>
-            <select className={fieldClass} value={formData.incidentType} onChange={e => update('incidentType', e.target.value)} required>
-              <option value="">Select type...</option>
-              {incidentTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Severity</label>
-            <select className={fieldClass} value={formData.severity} onChange={e => update('severity', e.target.value)} required>
-              <option value="">Select severity...</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelClass}>Operator / Reporter</label>
-            <input className={fieldClass} placeholder="Full name" value={formData.operator} onChange={e => update('operator', e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelClass}>Date & Time of Incident</label>
-            <input type="datetime-local" className={fieldClass} value={formData.dateTime} onChange={e => update('dateTime', e.target.value)} required />
-          </div>
-        </motion.div>
-
-        <motion.div variants={item} className="space-y-5 p-6">
-          <div>
-            <label className={labelClass}>Incident Description</label>
-            <textarea className={fieldClass + ' min-h-[100px] resize-y'} placeholder="Describe what happened, including timeline of events..." value={formData.description} onChange={e => update('description', e.target.value)} required />
-          </div>
-          <div>
-            <label className={labelClass}>Immediate Response Taken</label>
-            <textarea className={fieldClass + ' min-h-[80px] resize-y'} placeholder="What actions were taken immediately after the incident?" value={formData.immediateResponse} onChange={e => update('immediateResponse', e.target.value)} />
-          </div>
-        </motion.div>
-
-        <motion.div variants={item} className="p-6">
-          <label className={labelClass}>Attachments</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.csv,.xlsx"
-            className="hidden"
-            onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
-          />
-          <motion.div
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            whileHover={{ borderColor: 'hsl(38 92% 55% / 0.5)' }}
-            className={`flex cursor-pointer items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-              dragOver ? 'border-primary bg-primary/5' : 'border-border bg-muted/50'
-            }`}
-          >
-            <div className="text-center">
-              <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-                <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-              </motion.div>
-              <p className="mt-2 text-sm text-muted-foreground">Drop files here or click to upload</p>
-              <p className="text-xs text-muted-foreground">Photos, logs, data files (max 20MB each)</p>
+      <form onSubmit={submit} className="glass-card divide-y divide-border">
+        {/* SECTION A */}
+        <motion.section variants={item} initial="hidden" animate="show" className="p-6">
+          <div className={sectionTitle}>Section A — Incident Header</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className={labelClass}>Incident Title *</label>
+              <input className={fieldClass} value={d.incidentTitle} onChange={e=>upd('incidentTitle', e.target.value)} required />
             </div>
-          </motion.div>
+            <div>
+              <label className={labelClass}>Classification *</label>
+              <select className={fieldClass} value={d.classification} onChange={e=>upd('classification', e.target.value)} required>
+                <option value="">Select...</option>
+                {CLASSIFICATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Numbers</label>
+              <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="e.g. Not applicable / Process incident" />
+            </div>
+            <div className="md:col-span-2 grid grid-cols-3 gap-3">
+              <div>
+                <label className={labelClass}>Company Employees</label>
+                <input type="number" min={0} className={fieldClass} value={d.company} onChange={e=>upd('company', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>Contractor Employees</label>
+                <input type="number" min={0} className={fieldClass} value={d.contractor} onChange={e=>upd('contractor', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>Visitors</label>
+                <input type="number" min={0} className={fieldClass} value={d.visitors} onChange={e=>upd('visitors', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Name of Injured Person</label>
+              <input className={fieldClass} value={d.injuredName} onChange={e=>upd('injuredName', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Age / Sex of IP</label>
+              <input className={fieldClass} value={d.ageSex} onChange={e=>upd('ageSex', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Ticket no. / Department</label>
+              <input className={fieldClass} value={d.ticketDept} onChange={e=>upd('ticketDept', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Company / Contractor</label>
+              <input className={fieldClass} value={d.companyContractor} onChange={e=>upd('companyContractor', e.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Nature of Injury</label>
+              <input className={fieldClass} value={d.natureOfInjury} onChange={e=>upd('natureOfInjury', e.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Incident Reported by</label>
+              <input className={fieldClass} value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
+            </div>
+          </div>
+        </motion.section>
 
-          <AnimatePresence>
-            {attachments.length > 0 && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-3 space-y-2">
-                {attachments.map((file, i) => (
-                  <motion.div
-                    key={file.name + i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="flex items-center gap-3 rounded-md border border-border bg-muted/50 px-3 py-2"
-                  >
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span className="flex-1 truncate text-sm text-foreground">{file.name}</span>
-                    <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
-                    <button type="button" onClick={() => removeFile(i)} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </motion.div>
+        {/* SECTION B */}
+        <motion.section variants={item} initial="hidden" animate="show" className="p-6">
+          <div className={sectionTitle}>Section B — Incident Information</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className={labelClass}>Location of Incident *</label>
+              <input className={fieldClass} value={d.location} onChange={e=>upd('location', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass}>Incident Number</label>
+              <input className={fieldClass} value={d.incidentNumber} onChange={e=>upd('incidentNumber', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Date of Incident *</label>
+              <input type="date" className={fieldClass} value={d.dateOfIncident} onChange={e=>upd('dateOfIncident', e.target.value)} required />
+            </div>
+            <div>
+              <label className={labelClass}>Time of Incident</label>
+              <input type="time" className={fieldClass} value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Investigation Initiated (Date / Time)</label>
+              <input className={fieldClass} placeholder="e.g. 04 Sep 2020, 13:00" value={d.investigationInitiated} onChange={e=>upd('investigationInitiated', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>Report Submission Date</label>
+              <input type="date" className={fieldClass} value={d.reportSubmission} onChange={e=>upd('reportSubmission', e.target.value)} />
+            </div>
+          </div>
+        </motion.section>
+
+        {/* SECTION C */}
+        <motion.section variants={item} initial="hidden" animate="show" className="p-6 space-y-4">
+          <div className={sectionTitle}>Section C — Investigation Information</div>
+          <RepeatableList label="List of Records Reviewed" items={records} onChange={setRecords} placeholder="e.g. Process SOP, Operating manual" />
+          <RepeatableList label="List of Persons Interacted" items={persons} onChange={setPersons} placeholder="e.g. Pradeep Pal Singh — PA" />
+          <div className="grid gap-3 md:grid-cols-[auto_1fr] md:items-start">
+            <label className="flex items-center gap-2 pt-1 text-sm">
+              <input type="checkbox" checked={d.priorOccurred} onChange={e=>upd('priorOccurred', e.target.checked)} />
+              Prior similar incident
+            </label>
+            <textarea className={fieldClass + ' min-h-[60px]'} placeholder="Notes on prior incident, if any" value={d.priorNotes} onChange={e=>upd('priorNotes', e.target.value)} />
+          </div>
+        </motion.section>
+
+        {/* SECTION D */}
+        <motion.section variants={item} initial="hidden" animate="show" className="p-6 space-y-4">
+          <div className={sectionTitle}>Section D — Incident Narrative</div>
+          <div>
+            <label className={labelClass}>Summary of Incident *</label>
+            <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="State facts only. Mark estimates/beliefs explicitly." />
+          </div>
+          <div>
+            <label className={labelClass}>Chronology of Events</label>
+            <div className="space-y-2">
+              {chronology.map((c, i) => (
+                <div key={i} className="flex gap-2">
+                  <input placeholder="Time" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
+                    const n = [...chronology]; n[i] = {...n[i], time: e.target.value}; setChronology(n);
+                  }} />
+                  <input placeholder="Event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
+                    const n = [...chronology]; n[i] = {...n[i], event: e.target.value}; setChronology(n);
+                  }} />
+                  <button type="button" onClick={() => setChronology(chronology.filter((_,j)=>j!==i))} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              ))}
+              <button type="button" onClick={() => setChronology([...chronology, {time:'', event:''}])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
+            </div>
+          </div>
+          <RepeatableList label="List of Facts collected during Investigation" items={facts} onChange={setFacts} placeholder="e.g. Maximum design flow rate = 1200 LPH" />
+        </motion.section>
+
+        {/* SECTION E */}
+        <motion.section variants={item} initial="hidden" animate="show" className="p-6 space-y-5">
+          <div className={sectionTitle}>Section E — Supporting Attachments (optional, for AI grounding)</div>
+
+          <div>
+            <label className={labelClass}>SOPs / Operating Manuals / SMP / Checklist / Supporting Docs</label>
+            <input ref={docRef} type="file" multiple accept=".pdf,.docx,.txt,.md" className="hidden" onChange={e=>{ if (e.target.files) addDocs(e.target.files); e.target.value=''; }}/>
+            <div onClick={()=>docRef.current?.click()} className="cursor-pointer rounded-lg border-2 border-dashed border-border bg-muted/50 p-5 text-center hover:border-primary/50">
+              <Upload className="mx-auto h-6 w-6 text-muted-foreground" />
+              <p className="mt-1 text-xs text-muted-foreground">Click to attach PDF / DOCX / TXT (max 20 MB each)</p>
+            </div>
+            {docs.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {docs.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded border border-border bg-muted/40 px-2 py-1 text-xs">
+                    <FileText className="h-3 w-3 text-primary" />
+                    <span className="flex-1 truncate">{f.name}</span>
+                    <span className="text-muted-foreground">{fmtSize(f.size)}</span>
+                    <button type="button" onClick={()=>setDocs(docs.filter((_,j)=>j!==i))}><X className="h-3 w-3" /></button>
+                  </div>
                 ))}
-              </motion.div>
+              </div>
             )}
-          </AnimatePresence>
-        </motion.div>
+          </div>
 
-        <motion.div variants={item} className="flex items-center justify-end gap-3 p-6">
-          <button type="button" onClick={() => navigate('/')} className="rounded-lg px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Cancel
+          <div>
+            <label className={labelClass}>Photographs (rendered in the downloaded report)</label>
+            <input ref={photoRef} type="file" multiple accept="image/*" className="hidden" onChange={e=>{ if (e.target.files) addPhotos(e.target.files); e.target.value=''; }}/>
+            <div onClick={()=>photoRef.current?.click()} className="cursor-pointer rounded-lg border-2 border-dashed border-border bg-muted/50 p-5 text-center hover:border-primary/50">
+              <ImageIcon className="mx-auto h-6 w-6 text-muted-foreground" />
+              <p className="mt-1 text-xs text-muted-foreground">Click to attach photographs (max 5 MB each)</p>
+            </div>
+            {photos.length > 0 && (
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {photos.map((f, i) => (
+                  <div key={i} className="relative overflow-hidden rounded border border-border bg-muted/40">
+                    <img src={URL.createObjectURL(f)} alt={f.name} className="h-20 w-full object-cover" />
+                    <button type="button" onClick={()=>setPhotos(photos.filter((_,j)=>j!==i))} className="absolute right-0 top-0 rounded-bl bg-background/80 p-0.5"><X className="h-3 w-3" /></button>
+                    <div className="truncate p-1 text-[10px]">{f.name}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        <div className="flex items-center justify-end gap-3 p-6">
+          <button type="button" onClick={()=>navigate('/')} className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+            Save & Continue <ArrowRight className="h-4 w-4" />
           </button>
-          <motion.button
-            type="submit"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Sparkles className="h-4 w-4" />
-            Begin Analysis
-            <ArrowRight className="h-4 w-4" />
-          </motion.button>
-        </motion.div>
-      </motion.form>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RepeatableList({ label, items, onChange, placeholder }: { label: string; items: string[]; onChange: (v: string[])=>void; placeholder?: string }) {
+  return (
+    <div>
+      <label className={labelClass}>{label}</label>
+      <div className="space-y-2">
+        {items.map((v, i) => (
+          <div key={i} className="flex gap-2">
+            <input className={fieldClass + ' flex-1'} placeholder={placeholder} value={v} onChange={e => { const n=[...items]; n[i]=e.target.value; onChange(n); }} />
+            <button type="button" onClick={()=>onChange(items.filter((_,j)=>j!==i))} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        ))}
+        <button type="button" onClick={()=>onChange([...items, ''])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
+      </div>
     </div>
   );
 }

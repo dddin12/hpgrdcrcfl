@@ -1,176 +1,136 @@
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useMemo, useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, GitBranch, BarChart3, Shield, FileDown, Lightbulb, ChevronRight, Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
-import { getInvestigation } from '@/data/investigationStore';
-import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
-import FiveWhysPanel from '@/components/analysis/FiveWhysPanel';
-import FishbonePanel from '@/components/analysis/FishbonePanel';
-import CauseTreePanel from '@/components/analysis/CauseTreePanel';
-import RiskAssessmentPanel from '@/components/analysis/RiskAssessmentPanel';
-import CorrectiveActionsPanel from '@/components/analysis/CorrectiveActionsPanel';
+import { FileDown, Sparkles, Loader2, RefreshCw, ChevronRight } from 'lucide-react';
+import { getInvestigation, computeInputHash, storeAiReport } from '@/data/investigationStore';
 import { generateInvestigationReport } from '@/utils/generateReport';
-import { buildFallbackReport } from '@/utils/fallbackReport';
-import RcfaReportView from '@/components/analysis/RcfaReportView';
+import HpgrdcReportView from '@/components/analysis/HpgrdcReportView';
 import { supabase } from '@/integrations/supabase/client';
-import type { RcfaReport } from '@/types/investigation';
+import { toast } from 'sonner';
+import type { HpgrdcInvestigation, HpgrdcAiReport } from '@/types/investigation';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { toast } from 'sonner';
-
-const tabs = [
-  { id: 'five-whys', label: '5 Whys', icon: FileSearch },
-  { id: 'fishbone', label: 'Fishbone', icon: GitBranch },
-  { id: 'cause-tree', label: 'Cause Tree', icon: BarChart3 },
-  { id: 'risk', label: 'Risk Assessment', icon: Shield },
-  { id: 'actions', label: 'Corrective Actions', icon: Lightbulb },
-];
-
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.1 } } };
-const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
 export default function InvestigationDetail() {
   const { id } = useParams();
-  const [activeTab, setActiveTab] = useState('five-whys');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [report, setReport] = useState<RcfaReport | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const investigation = getInvestigation(id);
+  const [inv, setInv] = useState<HpgrdcInvestigation | undefined>(() => getInvestigation(id));
+  const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [currentHash, setCurrentHash] = useState<string>('');
 
-  if (!investigation) {
+  useEffect(() => {
+    if (inv) computeInputHash(inv).then(setCurrentHash);
+  }, [inv]);
+
+  const isStale = useMemo(() => !!inv?.aiReport && currentHash && inv.aiInputHash !== currentHash, [inv, currentHash]);
+
+  if (!inv) {
     return (
       <div className="mx-auto max-w-xl py-16 text-center">
         <h1 className="text-lg font-semibold">Investigation not found</h1>
-        <p className="mt-2 text-sm text-muted-foreground">This investigation does not exist or was cleared from local storage.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Cleared from local storage or never created.</p>
+        <Link to="/" className="mt-4 inline-block text-sm text-primary hover:underline">← Back to dashboard</Link>
       </div>
     );
   }
 
-  const handleExport = async () => {
-    if (!report) {
-      toast.error('Generate the RCFA report first');
-      return;
-    }
-    setIsGenerating(true);
-    try {
-      await generateInvestigationReport(investigation, report);
-      toast.success('Report downloaded — open the HTML file and print to PDF');
-    } catch {
-      toast.error('Failed to generate report');
-    } finally {
-      setTimeout(() => setIsGenerating(false), 500);
-    }
-  };
-
   const runGenerate = async () => {
-    setIsAnalyzing(true);
+    setBusy(true);
     try {
-      const sopExcerpts = (investigation as any).sopExcerpts ?? [];
+      const hash = await computeInputHash(inv);
       const { data, error } = await supabase.functions.invoke('generate-rcfa', {
-        body: { investigation, sopExcerpts },
+        body: { investigation: inv, sopExcerpts: inv.sopExcerpts || [], deepReview: false },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      if (!data?.report) throw new Error('Empty response from AI');
-      setReport(data.report as RcfaReport);
-      toast.success('RCFA report generated');
+      if (!data?.report) throw new Error('Empty response');
+      const report: HpgrdcAiReport = {
+        ...data.report,
+        inputHash: hash,
+        generatedAt: new Date().toISOString(),
+        model: data.report.model || 'flash',
+      };
+      const next = storeAiReport(inv, report);
+      setInv(next);
+      setCurrentHash(hash);
+      toast.success('Investigation analysis generated');
     } catch (err: any) {
       console.error(err);
-      const msg = err?.message || 'AI generation failed';
-      toast.error(`${msg} — using template fallback`);
-      setReport(buildFallbackReport(investigation));
+      toast.error(err?.message || 'AI generation failed');
     } finally {
-      setIsAnalyzing(false);
+      setBusy(false);
     }
   };
 
+  const download = async () => {
+    if (!inv.aiReport) { toast.error('Generate the report first'); return; }
+    setDownloading(true);
+    try {
+      await generateInvestigationReport(inv, inv.aiReport);
+      toast.success('Report downloaded — open the HTML file and print to PDF');
+    } catch { toast.error('Failed to download'); }
+    finally { setTimeout(() => setDownloading(false), 400); }
+  };
+
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
-      <motion.div variants={item} className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Investigations</span>
+            <Link to="/" className="hover:underline">Investigations</Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="font-mono text-foreground">{investigation.id}</span>
+            <span className="font-mono text-foreground">{inv.id}</span>
           </div>
-          <h1 className="mt-1 text-xl font-bold">{investigation.equipment}</h1>
-          <p className="text-sm text-muted-foreground">{investigation.labName}</p>
+          <h1 className="mt-1 text-xl font-bold">{inv.incidentTitle}</h1>
+          <p className="text-sm text-muted-foreground">{inv.location} • {inv.dateOfIncident}{inv.timeOfIncident?` ${inv.timeOfIncident}`:''}</p>
         </div>
-        <div className="flex items-center gap-3">
-          <StatusBadge status={investigation.status} />
-          <SeverityBadge severity={investigation.severity} />
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleExport}
-            disabled={isGenerating || !report}
-            title={!report ? 'Generate the RCFA report first' : 'Download cached report'}
-            className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-            {isGenerating ? 'Generating...' : 'Download Report'}
-          </motion.button>
+        <div className="flex items-center gap-2">
+          {inv.classification && <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{inv.classification}</span>}
+          <button onClick={download} disabled={!inv.aiReport || downloading} className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50">
+            {downloading ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4"/>}
+            Download Report
+          </button>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div variants={item} className="grid gap-4 md:grid-cols-3">
-        {[
-          { label: 'Operator', value: investigation.operator },
-          { label: 'Date & Time', value: new Date(investigation.dateTime).toLocaleString() },
-          { label: 'Risk Score', value: `${investigation.riskScore ?? '—'} / 25`, highlight: true },
-        ].map((field) => (
-          <motion.div
-            key={field.label}
-            whileHover={{ scale: 1.02, y: -2 }}
-            className="glass-card p-4 transition-shadow hover:shadow-lg"
-          >
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{field.label}</p>
-            <p className={`mt-1 text-sm font-${field.highlight ? 'bold text-critical' : 'medium'}`}>{field.value}</p>
-          </motion.div>
-        ))}
-      </motion.div>
-
-      <motion.div variants={item} className="glass-card p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Incident Description</p>
-        <p className="mt-2 text-sm leading-relaxed">{investigation.description}</p>
-        <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Immediate Response</p>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{investigation.immediateResponse}</p>
-      </motion.div>
-
-      {/* Generate RCFA Report */}
-      <motion.div variants={item} className="glass-card p-5">
+      {/* Generate panel */}
+      <div className="glass-card p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-semibold">AI-Assisted RCFA Report</p>
-              <p className="text-xs text-muted-foreground">11-section audit-ready analysis. AI is triggered only when you click Generate.</p>
+              <p className="text-sm font-semibold">AI Investigation Analysis</p>
+              <p className="text-xs text-muted-foreground">
+                Generates WHY Tree, Key Factors, Systems to Reinforce, and Recommendations. AI runs only on click. Cached until inputs change.
+              </p>
+              {inv.aiReport && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Last generated {new Date(inv.aiReport.generatedAt).toLocaleString()} • model: {inv.aiReport.model}
+                  {isStale && <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 font-semibold text-amber-500">Inputs changed — regenerate</span>}
+                </p>
+              )}
             </div>
           </div>
-          {!report ? (
-            <motion.button
-              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={runGenerate} disabled={isAnalyzing}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-            >
-              {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-              {isAnalyzing ? 'Generating...' : 'Generate RCFA Report'}
-            </motion.button>
+          {!inv.aiReport ? (
+            <button onClick={runGenerate} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin"/> : <Sparkles className="h-4 w-4"/>}
+              {busy ? 'Generating...' : 'Generate Report'}
+            </button>
           ) : (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <button disabled={isAnalyzing} className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-60">
-                  {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                <button disabled={busy} className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2.5 text-sm font-medium hover:bg-accent disabled:opacity-60">
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCw className="h-4 w-4"/>}
                   Regenerate
                 </button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Regenerate RCFA report?</AlertDialogTitle>
+                  <AlertDialogTitle>Regenerate analysis?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will trigger another AI call and replace the cached report. Use only if the current report is unsatisfactory.
+                    Triggers another AI call and replaces the cached analysis. The previous version is kept in history.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -181,64 +141,21 @@ export default function InvestigationDetail() {
             </AlertDialog>
           )}
         </div>
+      </div>
 
-        <AnimatePresence>
-          {report && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5">
-              {report.generatedBy === 'template' && (
-                <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>AI generation unavailable; draft report generated using structured template.</span>
-                </div>
-              )}
-              <RcfaReportView report={report} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      {/* Analysis Tabs */}
-      <motion.div variants={item} className="glass-card overflow-hidden">
-        <div className="flex overflow-x-auto border-b border-border">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-2 whitespace-nowrap px-5 py-3.5 text-sm font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-              {activeTab === tab.id && (
-                <motion.div
-                  layoutId="tab-underline"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
-                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-            className="p-6"
-          >
-            {activeTab === 'five-whys' && <FiveWhysPanel investigation={investigation} report={report} />}
-            {activeTab === 'fishbone' && <FishbonePanel investigation={investigation} report={report} />}
-            {activeTab === 'cause-tree' && <CauseTreePanel investigation={investigation} report={report} />}
-            {activeTab === 'risk' && <RiskAssessmentPanel investigation={investigation} report={report} />}
-            {activeTab === 'actions' && <CorrectiveActionsPanel investigation={investigation} report={report} />}
+      <AnimatePresence>
+        {inv.aiReport && (
+          <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>
+            <HpgrdcReportView inv={inv} report={inv.aiReport} />
           </motion.div>
-        </AnimatePresence>
-      </motion.div>
+        )}
+        {!inv.aiReport && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} className="glass-card p-8 text-center">
+            <p className="text-sm font-semibold">Investigation saved</p>
+            <p className="mt-1 text-xs text-muted-foreground">Click <b>Generate Report</b> above to produce the WHY Tree, Key Factors, Systems to Reinforce, and Recommendations.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

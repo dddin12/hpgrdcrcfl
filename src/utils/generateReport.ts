@@ -1,198 +1,174 @@
-import { Investigation, RcfaReport } from '@/types/investigation';
 import { SYSTEMS_TO_REINFORCE } from '@/types/investigation';
-import hpLogoUrl from '@/assets/hp-logo.png';
-import rndLogoUrl from '@/assets/rnd-logo.png';
+import type { HpgrdcInvestigation, HpgrdcAiReport } from '@/types/investigation';
 
-async function toBase64(url: string): Promise<string> {
-  const res = await fetch(url);
-  const blob = await res.blob();
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
-}
+const esc = (s: unknown) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const nl2br = (s: string) => esc(s).replace(/\n/g, '<br/>');
 
-const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export async function generateInvestigationReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport): Promise<void> {
+  const classCells = ['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c =>
+    `<td class="cls ${inv.classification===c?'sel':''}">${c}</td>`).join('');
 
-function renderActions(actions: RcfaReport['correctiveActions']): string {
-  if (!actions?.length) return '<p style="font-size:13px;color:#888;">None specified.</p>';
-  return `<table>
-    <thead><tr><th>#</th><th>Action</th><th>Priority</th><th>Owner</th><th>Due</th></tr></thead>
-    <tbody>${actions.map((a, i) => `
-      <tr>
-        <td style="font-family:monospace;">${i + 1}</td>
-        <td>${esc(a.description)}${a.sopCitation ? `<div style="margin-top:4px;display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:10px;">📖 ${esc(a.sopCitation)}</div>` : ''}</td>
-        <td>${a.priority ? `<span class="badge badge-${a.priority}">${a.priority.toUpperCase()}</span>` : '—'}</td>
-        <td>${esc(a.owner || '—')}</td>
-        <td>${esc(a.dueWindow || '—')}</td>
-      </tr>`).join('')}
-    </tbody></table>`;
-}
+  const sysRows = SYSTEMS_TO_REINFORCE.map((sys, i) => {
+    const m = (report.systemsToReinforce||[]).find(s => (s.system||'').trim().toLowerCase() === sys.toLowerCase());
+    const def = (m?.deficiency || '').trim();
+    return `<tr><td class="num">${i+1}</td><td>${esc(sys)}</td><td>${esc(def)}</td></tr>`;
+  }).join('');
 
-function renderList(items: string[]): string {
-  if (!items?.length) return '<p style="font-size:13px;color:#888;">None identified.</p>';
-  return `<ul style="margin-left:18px;font-size:13px;">${items.map(i => `<li style="margin-bottom:4px;">${esc(i)}</li>`).join('')}</ul>`;
-}
+  const recRows = (report.recommendations||[]).map((r, i) =>
+    `<tr><td class="num">${i+1}</td><td>${esc(r.recommendation)}</td><td>${esc(r.responsibility||'')}</td><td>${esc(r.targetDate||'')}</td><td>${esc(r.verifiedBy||'')}</td></tr>`).join('')
+    || `<tr><td colspan="5" style="text-align:center;color:#666;">No recommendations.</td></tr>`;
 
-export async function generateInvestigationReport(investigation: Investigation, report: RcfaReport): Promise<void> {
-  const [hpLogo, rndLogo] = await Promise.all([toBase64(hpLogoUrl), toBase64(rndLogoUrl)]);
+  const chronologyRows = inv.chronology.length
+    ? `<ol>${inv.chronology.map(c => `<li>${c.time?`<b>${esc(c.time)}</b> — `:''}${esc(c.event)}</li>`).join('')}</ol>`
+    : '<p style="color:#666;">—</p>';
 
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>RCFA Investigation Report — ${esc(investigation.id)}</title>
+  const factRows = inv.facts.length
+    ? `<ol>${inv.facts.map(f => `<li>${esc(f)}</li>`).join('')}</ol>`
+    : '<p style="color:#666;">—</p>';
+
+  const whyTree = `
+    <table class="why">
+      <tr><th>Effect</th></tr>
+      <tr><td>${esc(report.whyTree.effect)}</td></tr>
+    </table>
+    <table class="why">
+      <tr><th colspan="2">Cause</th></tr>
+      <tr><td>${esc(report.whyTree.cause.primary)}</td><td>${esc(report.whyTree.cause.secondary||'')}</td></tr>
+    </table>
+    <table class="why">
+      <tr><th colspan="${Math.max(report.whyTree.why.length,1)}">Why</th></tr>
+      <tr>${(report.whyTree.why.length?report.whyTree.why:['']).map(x => `<td>${esc(x)}</td>`).join('')}</tr>
+    </table>
+    ${report.whyTree.deeper.length ? `<table class="why"><tr>${report.whyTree.deeper.map(x => `<td>${esc(x)}</td>`).join('')}</tr></table>` : ''}
+    ${report.whyTree.rootWeakness.length ? `<table class="why"><tr>${report.whyTree.rootWeakness.map(x => `<td>${esc(x)}</td>`).join('')}</tr></table>` : ''}
+  `;
+
+  const kfBlock = (label: string, items: string[]) => `
+    <table class="kf">
+      <tr><th>${label}</th></tr>
+      <tr><td>${items?.length ? items.map(esc).join('<br/>') : 'Nil'}</td></tr>
+    </table>
+  `;
+
+  const photoBlock = (inv.photographs||[]).length
+    ? (inv.photographs||[]).map((p, i) => `
+        <figure class="photo">
+          <img src="${p.dataUrl}" alt="${esc(p.name)}"/>
+          <figcaption>Figure ${i+1}: ${esc(p.caption || p.name)}</figcaption>
+        </figure>`).join('')
+    : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Incident Investigation Report — ${esc(inv.id)}</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a2e;padding:40px;line-height:1.6}
-  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #d4a017;padding-bottom:20px;margin-bottom:30px}
-  .header-left{display:flex;align-items:center;gap:16px}
-  .header-logo{height:48px;width:auto}
-  .header-right{display:flex;align-items:center;gap:16px}
-  .section{margin-bottom:28px;page-break-inside:avoid}
-  .section-title{font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#d4a017;border-bottom:1px solid #e5e5e5;padding-bottom:6px;margin-bottom:14px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .field{background:#f8f8f8;border-radius:6px;padding:12px}
-  .field-label{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#888;font-weight:600}
-  .field-value{font-size:14px;margin-top:4px;font-weight:500}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th{background:#1a1a2e;color:#fff;padding:10px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:1px}
-  td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
-  tr:nth-child(even){background:#f8f8f8}
-  .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600}
-  .badge-high{background:#fee2e2;color:#dc2626}
-  .badge-medium{background:#fef3c7;color:#d97706}
-  .badge-low{background:#dbeafe;color:#2563eb}
-  .risk-box{background:#1a1a2e;color:#fff;border-radius:8px;padding:20px}
-  .risk-label{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:2px}
-  .risk-value{font-size:15px;color:#fff;margin-top:8px;font-weight:600;line-height:1.4}
-  .why-item{display:flex;gap:12px;margin-bottom:12px}
-  .why-num{width:28px;height:28px;border-radius:50%;background:#d4a017;color:#1a1a2e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
-  .why-q{font-weight:600;font-size:13px}
-  .why-a{font-size:13px;color:#555;margin-top:2px}
-  .fish-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .fish-cell{background:#f8f8f8;border-left:3px solid #d4a017;padding:10px 12px;border-radius:0 6px 6px 0}
-  .fish-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#1a1a2e;margin-bottom:4px}
-  .fish-list{font-size:12px;color:#444;margin-left:14px}
-  .barrier-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .barrier-cell{padding:10px 12px;border-radius:6px}
-  .barrier-existing{background:#ecfdf5;border:1px solid #a7f3d0}
-  .barrier-failed{background:#fef2f2;border:1px solid #fecaca}
-  .barrier-missing{background:#fffbeb;border:1px solid #fde68a}
-  .timeline-item{padding:8px 12px;border-left:2px solid #d4a017;margin-bottom:6px;background:#f8f8f8}
-  .timeline-time{font-size:11px;font-weight:600;color:#d4a017}
-  .footer{margin-top:40px;padding-top:20px;border-top:2px solid #e5e5e5;display:flex;align-items:center;justify-content:space-between}
-  .footer-logos{display:flex;align-items:center;gap:12px}
-  .footer-logos img{height:24px;width:auto;opacity:.6}
-  .footer-text{text-align:right;font-size:11px;color:#888}
-  @media print{body{padding:20px}.section{page-break-inside:avoid}}
+  @page{size:A4;margin:18mm}
+  *{box-sizing:border-box}
+  body{font-family:'Times New Roman',Georgia,serif;color:#000;background:#fff;font-size:11pt;line-height:1.45;margin:0;padding:24px}
+  h1.title{text-align:center;font-size:18pt;margin:0 0 4px 0;font-weight:700;letter-spacing:.5px}
+  .sub{text-align:center;font-size:12pt;font-weight:700;margin:0 0 18px 0}
+  h2{font-size:11pt;font-weight:700;margin:18px 0 6px 0;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;margin-bottom:6px}
+  th,td{border:1px solid #000;padding:5px 7px;vertical-align:top;font-size:10.5pt;text-align:left}
+  th{background:#eee;font-weight:700}
+  td.num{width:42px;text-align:center;font-family:monospace}
+  td.cls{text-align:center;padding:4px 2px;border:1px solid #000;font-weight:600;width:14%}
+  td.cls.sel{background:#000;color:#fff}
+  ol{margin:0 0 6px 22px;padding:0}
+  ol li{margin-bottom:3px}
+  .why td,.why th{text-align:center}
+  .why th{background:#ddd}
+  .kf{margin-bottom:4px}
+  .completion{display:grid;grid-template-columns:1fr 1fr;border:1px solid #000}
+  .completion>div{border-right:1px solid #000;padding:24px 12px}
+  .completion>div:last-child{border-right:none}
+  .photos{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+  .photo{border:1px solid #000;padding:8px;text-align:center;page-break-inside:avoid}
+  .photo img{max-width:100%;max-height:320px;object-fit:contain}
+  .photo figcaption{margin-top:6px;font-style:italic;font-size:10pt}
+  .empty-photos{border:1px solid #000;min-height:160px;padding:8px;color:#666;font-style:italic}
+  p{margin:0 0 6px 0}
+  .narrative{border:1px solid #000;padding:8px;white-space:pre-wrap}
+  @media print{ body{padding:0} }
 </style></head><body>
-<div class="header">
-  <div class="header-left">
-    <img src="${hpLogo}" alt="HP Logo" class="header-logo"/>
-    <div>
-      <h1 style="font-size:22px;color:#1a1a2e;">RCFA Investigation Report</h1>
-      <p style="font-size:11px;color:#666;letter-spacing:2px;text-transform:uppercase;">Root Cause Failure Analysis${report.generatedBy === 'template' ? ' — Template Draft' : ''}</p>
-    </div>
-  </div>
-  <div class="header-right">
-    <div style="text-align:right;">
-      <p style="font-size:14px;color:#1a1a2e;font-weight:600;">${esc(investigation.id)}</p>
-      <p style="font-size:11px;color:#666;">Generated ${new Date().toLocaleDateString()}</p>
-    </div>
-    <img src="${rndLogo}" alt="RnD Logo" class="header-logo"/>
-  </div>
-</div>
 
-<div class="section">
-  <div class="section-title">Incident Details</div>
-  <div class="grid">
-    <div class="field"><div class="field-label">Lab Name</div><div class="field-value">${esc(investigation.labName)}</div></div>
-    <div class="field"><div class="field-label">Equipment</div><div class="field-value">${esc(investigation.equipment)}</div></div>
-    <div class="field"><div class="field-label">Operator</div><div class="field-value">${esc(investigation.operator)}</div></div>
-    <div class="field"><div class="field-label">Date & Time</div><div class="field-value">${new Date(investigation.dateTime).toLocaleString()}</div></div>
-    <div class="field"><div class="field-label">Severity</div><div class="field-value" style="text-transform:uppercase;">${esc(investigation.severity)}</div></div>
-    <div class="field"><div class="field-label">Status</div><div class="field-value" style="text-transform:uppercase;">${esc(investigation.status)}</div></div>
-  </div>
-</div>
+<h1 class="title">Incident Investigation Report</h1>
+<p class="sub">HPGRDC.</p>
 
-<div class="section"><div class="section-title">1. Incident Summary</div><p style="font-size:13px;">${esc(report.incidentSummary)}</p></div>
-
-<div class="section"><div class="section-title">2. Chronology of Events</div>
-${report.chronology.map(c => `<div class="timeline-item">${c.time ? `<div class="timeline-time">${esc(c.time)}</div>` : ''}<div style="font-size:13px;">${esc(c.event)}</div></div>`).join('')}
-</div>
-
-<div class="section"><div class="section-title">3. Immediate Cause</div>
-<p style="font-size:13px;background:#fef3c7;padding:12px;border-left:3px solid #d97706;border-radius:0 6px 6px 0;">${esc(report.immediateCause)}</p>
-</div>
-
-<div class="section"><div class="section-title">4. 5 Whys Analysis</div>
-${report.fiveWhys.map((w, i) => `<div class="why-item"><div class="why-num">${i + 1}</div><div><div class="why-q">${esc(w.why)}</div><div class="why-a">${esc(w.because)}</div></div></div>`).join('')}
-</div>
-
-<div class="section"><div class="section-title">5. Fishbone Analysis (6M)</div>
-<div class="fish-grid">
-${(['man','machine','method','material','measurement','environment'] as const).map(k => `<div class="fish-cell"><div class="fish-name">${k}</div><ul class="fish-list">${(report.fishbone[k] || []).map(x => `<li>${esc(x)}</li>`).join('') || '<li style="color:#888;">—</li>'}</ul></div>`).join('')}
-</div></div>
-
-<div class="section"><div class="section-title">6. Key Factors Identified</div>
-<div class="grid">
-${(['human','system','physical','organizational'] as const).map(k => `<div class="field"><div class="field-label">${k} factors</div>${renderList(report.keyFactors[k] || [])}</div>`).join('')}
-</div></div>
-
-<div class="section"><div class="section-title">7. Barrier Failure Analysis</div>
-<div class="barrier-grid">
-  <div class="barrier-cell barrier-existing"><div class="field-label" style="color:#047857;">Existing</div>${renderList(report.barriers.existing)}</div>
-  <div class="barrier-cell barrier-failed"><div class="field-label" style="color:#b91c1c;">Failed</div>${renderList(report.barriers.failed)}</div>
-  <div class="barrier-cell barrier-missing"><div class="field-label" style="color:#b45309;">Missing</div>${renderList(report.barriers.missing)}</div>
-</div></div>
-
-<div class="section"><div class="section-title">8. Risk Assessment</div>
-<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-  <div class="risk-box"><div class="risk-label">Severity</div><div class="risk-value">${esc(report.riskAssessment.severity)}</div></div>
-  <div class="risk-box"><div class="risk-label">Likelihood</div><div class="risk-value">${esc(report.riskAssessment.likelihood)}</div></div>
-  <div class="risk-box"><div class="risk-label">Escalation Potential</div><div class="risk-value">${esc(report.riskAssessment.escalation)}</div></div>
-</div></div>
-
-<div class="section"><div class="section-title">9. Systems to be Reinforced</div>
 <table>
-  <thead><tr><th style="width:60px;">Sr No.</th><th>System</th><th>Deficiency</th></tr></thead>
-  <tbody>
-    ${SYSTEMS_TO_REINFORCE.map((sys, i) => {
-      const match = (report.systemsToReinforce || []).find(
-        s => (s.system || '').trim().toLowerCase() === sys.toLowerCase()
-      );
-      const def = (match?.deficiency || '').trim();
-      return `<tr><td style="font-family:monospace;">${i + 1}</td><td style="font-weight:600;">${esc(sys)}</td><td>${esc(def)}</td></tr>`;
-    }).join('')}
-  </tbody>
+  <tr><th style="width:30%">Incident Title</th><td colspan="6">${esc(inv.incidentTitle)}</td></tr>
+  <tr><th>Classification</th>${classCells}</tr>
+  <tr><th>Numbers</th><td colspan="6">${esc(inv.numbers)}</td></tr>
+  <tr><th>Details of Injured</th>
+    <td colspan="2" style="text-align:center;font-weight:600">Company Employees</td>
+    <td colspan="2" style="text-align:center;font-weight:600">Contractor Employees</td>
+    <td colspan="2" style="text-align:center;font-weight:600">Visitors</td></tr>
+  <tr><th>Numbers</th>
+    <td colspan="2" style="text-align:center">${inv.injured.company}</td>
+    <td colspan="2" style="text-align:center">${inv.injured.contractor}</td>
+    <td colspan="2" style="text-align:center">${inv.injured.visitors}</td></tr>
 </table>
+
+<table>
+  <tr><th style="width:30%">Name of Injured Person</th><td>${esc(inv.injuredName)}</td><th style="width:18%">Age / Sex of IP</th><td>${esc(inv.ageSex)}</td></tr>
+  <tr><th>Ticket no. / Department</th><td>${esc(inv.ticketDept)}</td><th>Company / Contractor</th><td>${esc(inv.companyContractor)}</td></tr>
+  <tr><th>Nature of Injury</th><td colspan="3">${esc(inv.natureOfInjury)}</td></tr>
+  <tr><th>Incident Reported by</th><td colspan="3">${esc(inv.reportedBy)}</td></tr>
+</table>
+
+<table>
+  <tr><th style="width:30%">Location of Incident</th><td>${esc(inv.location)}</td><th style="width:18%">Incident Number</th><td>${esc(inv.incidentNumber)}</td></tr>
+  <tr><th>Date of Incident</th><td>${esc(inv.dateOfIncident)}</td><th>Time of Incident</th><td>${esc(inv.timeOfIncident)}</td></tr>
+  <tr><th>Incident Investigation Initiated</th><td>${esc(inv.investigationInitiated)}</td><th>Report Submission</th><td>${esc(inv.reportSubmission)}</td></tr>
+  <tr><th>List of Records Reviewed</th><td>${(inv.recordsReviewed||[]).map(esc).join('<br/>')}</td>
+      <th>List of Persons Interacted</th><td>${(inv.personsInteracted||[]).map(esc).join('<br/>')}</td></tr>
+</table>
+
+<p><b>Any incident reported earlier in similar situation:</b> ${inv.priorSimilar.occurred ? 'Yes — ' + esc(inv.priorSimilar.notes) : 'No'}</p>
+
+<h2>Summary of Incident</h2>
+<div class="narrative">${nl2br(inv.summary)}</div>
+
+<h2>Chronology of Events</h2>
+${chronologyRows}
+
+<h2>List of Facts collected during Investigation</h2>
+${factRows}
+
+<h2>WHY Tree Analysis</h2>
+${whyTree}
+
+<h2>Key Factors Identified</h2>
+${kfBlock('SYSTEM FACTORS', report.keyFactors.system)}
+${kfBlock('HUMAN FACTORS', report.keyFactors.human)}
+${kfBlock('PHYSICAL FACTORS', report.keyFactors.physical)}
+
+<h2>Systems that needs to be Reinforced</h2>
+<table>
+  <tr><th style="width:42px">Sr No.</th><th>System</th><th>Deficiency</th></tr>
+  ${sysRows}
+</table>
+
+<h2>Recommendations</h2>
+<table>
+  <tr><th style="width:42px">Sr No.</th><th>Recommendation</th><th style="width:18%">Responsibility</th><th style="width:14%">Target Date</th><th style="width:20%">Implementation to be Verified by</th></tr>
+  ${recRows}
+</table>
+
+<h2>Incident Investigation Completion</h2>
+<div class="completion">
+  <div>Prepared by: ${esc(inv.preparedBy || '')}</div>
+  <div>Reviewed &amp; Approved by: ${esc(inv.approvedBy || '')}</div>
 </div>
 
-<div class="section"><div class="section-title">10. Corrective Actions</div>${renderActions(report.correctiveActions)}</div>
-<div class="section"><div class="section-title">11. Preventive Actions</div>${renderActions(report.preventiveActions)}</div>
-<div class="section"><div class="section-title">12. Lessons Learned</div>${renderList(report.lessonsLearned)}</div>
+<h2>Supporting Photographs:</h2>
+${(inv.photographs||[]).length ? `<div class="photos">${photoBlock}</div>` : `<div class="empty-photos"></div>`}
 
-${report.assumptions?.length ? `<div class="section"><div class="section-title">Assumptions / Information Gaps</div>${renderList(report.assumptions)}</div>` : ''}
-
-${report.procedureGaps?.length ? `<div class="section"><div class="section-title">Procedural Deviations Found in SOP / Manual</div>
-<ul style="list-style:none;padding:0;margin:0;">${report.procedureGaps.map(g => `<li style="border-left:3px solid #dc2626;background:#fef2f2;padding:10px 12px;margin-bottom:8px;border-radius:0 6px 6px 0;font-size:13px;"><div>${esc(g.issue)}</div><div style="margin-top:4px;display:inline-block;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:10px;">📖 ${esc(g.sopCitation)}</div></li>`).join('')}</ul></div>` : ''}
-
-${report.references?.length ? `<div class="section"><div class="section-title">Document References</div>
-<table><thead><tr><th>Source</th><th>Page</th><th>Quote</th><th>Why it matters</th></tr></thead>
-<tbody>${report.references.map(r => `<tr><td style="font-weight:600;">${esc(r.source)}</td><td style="font-family:monospace;color:#d4a017;">${esc(r.page)}</td><td style="font-style:italic;color:#555;">${r.quote ? `"${esc(r.quote)}"` : '—'}</td><td>${esc(r.relevance)}</td></tr>`).join('')}</tbody></table></div>` : ''}
-
-<div class="footer">
-  <div class="footer-logos"><img src="${hpLogo}" alt="HP"/><img src="${rndLogo}" alt="RnD"/></div>
-  <div class="footer-text"><p>CONFIDENTIAL — Root Cause Failure Analysis Report</p><p>Generated on ${new Date().toLocaleString()} | RCFA Investigation System</p></div>
-</div>
 </body></html>`;
 
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `RCFA-Report-${investigation.id}.html`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Incident-Investigation-Report-${inv.id}.html`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
