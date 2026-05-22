@@ -84,3 +84,14 @@ export function storeAiReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport):
   saveInvestigation(next);
   return next;
 }
+
+/**
+ * Persist a manually edited AI report. Does NOT update aiInputHash,
+ * so the "inputs changed — regenerate" warning continues to reflect
+ * whether the underlying investigation inputs (not the edits) changed.
+ */
+export function updateAiReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport): HpgrdcInvestigation {
+  const next: HpgrdcInvestigation = { ...inv, aiReport: { ...report } };
+  saveInvestigation(next);
+  return next;
+}
