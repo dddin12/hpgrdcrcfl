@@ -18,7 +18,7 @@ export default function RiskMatrix() {
         transition={{ delay: 0.1 }}
         className="glass-card p-6"
       >
-        <RiskAssessmentPanel investigation={mockInvestigations[0]} />
+        <RiskAssessmentPanel investigation={mockInvestigations[0]} report={null} />
       </motion.div>
     </div>
   );
