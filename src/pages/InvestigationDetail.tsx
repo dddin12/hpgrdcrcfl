@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, GitBranch, BarChart3, Shield, FileDown, Lightbulb, ChevronRight, Sparkles, Loader2 } from 'lucide-react';
+import { FileSearch, GitBranch, BarChart3, Shield, FileDown, Lightbulb, ChevronRight, Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
 import FiveWhysPanel from '@/components/analysis/FiveWhysPanel';
@@ -10,6 +10,13 @@ import CauseTreePanel from '@/components/analysis/CauseTreePanel';
 import RiskAssessmentPanel from '@/components/analysis/RiskAssessmentPanel';
 import CorrectiveActionsPanel from '@/components/analysis/CorrectiveActionsPanel';
 import { generateInvestigationReport } from '@/utils/generateReport';
+import { buildFallbackReport } from '@/utils/fallbackReport';
+import { supabase } from '@/integrations/supabase/client';
+import type { RcfaReport } from '@/types/investigation';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 const tabs = [
@@ -23,41 +30,22 @@ const tabs = [
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.1 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
 
-function buildAnalysisSummary(investigation: typeof mockInvestigations[0]): string {
-  const parts: string[] = [];
-  parts.push(`Incident involving ${investigation.equipment} in ${investigation.labName} — classified as ${investigation.severity.toUpperCase()} severity.`);
-  
-  if (investigation.immeditateCause) {
-    parts.push(`Immediate cause identified: ${investigation.immeditateCause}.`);
-  }
-  if (investigation.contributingCauses?.length) {
-    parts.push(`Contributing factors: ${investigation.contributingCauses.join('; ')}.`);
-  }
-  if (investigation.rootCause) {
-    parts.push(`Root cause: ${investigation.rootCause}.`);
-  }
-  if (investigation.riskScore) {
-    const riskLevel = investigation.riskScore >= 15 ? 'HIGH' : investigation.riskScore >= 8 ? 'MEDIUM' : 'LOW';
-    parts.push(`Risk score: ${investigation.riskScore}/25 (${riskLevel} risk quadrant).`);
-  }
-  if (!investigation.rootCause) {
-    parts.push('Root cause analysis is still pending — complete the 5 Whys and Fishbone analysis tabs to identify the root cause.');
-  }
-  return parts.join(' ');
-}
-
 export default function InvestigationDetail() {
   const { id } = useParams();
   const [activeTab, setActiveTab] = useState('five-whys');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+  const [report, setReport] = useState<RcfaReport | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const investigation = mockInvestigations.find(inv => inv.id === id) || mockInvestigations[0];
 
   const handleExport = async () => {
+    if (!report) {
+      toast.error('Generate the RCFA report first');
+      return;
+    }
     setIsGenerating(true);
     try {
-      await generateInvestigationReport(investigation);
+      await generateInvestigationReport(investigation, report);
       toast.success('Report downloaded — open the HTML file and print to PDF');
     } catch {
       toast.error('Failed to generate report');
@@ -66,14 +54,26 @@ export default function InvestigationDetail() {
     }
   };
 
-  const handleGenerateSummary = () => {
+  const runGenerate = async () => {
     setIsAnalyzing(true);
-    setAnalysisSummary(null);
-    // Brief delay for UX feedback, then build from real data
-    setTimeout(() => {
-      setAnalysisSummary(buildAnalysisSummary(investigation));
+    try {
+      const sopExcerpts = (investigation as any).sopExcerpts ?? [];
+      const { data, error } = await supabase.functions.invoke('generate-rcfa', {
+        body: { investigation, sopExcerpts },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (!data?.report) throw new Error('Empty response from AI');
+      setReport(data.report as RcfaReport);
+      toast.success('RCFA report generated');
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.message || 'AI generation failed';
+      toast.error(`${msg} — using template fallback`);
+      setReport(buildFallbackReport(investigation));
+    } finally {
       setIsAnalyzing(false);
-    }, 800);
+    }
   };
 
   return (
@@ -95,7 +95,8 @@ export default function InvestigationDetail() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={handleExport}
-            disabled={isGenerating}
+            disabled={isGenerating || !report}
+            title={!report ? 'Generate the RCFA report first' : 'Download cached report'}
             className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
@@ -128,43 +129,59 @@ export default function InvestigationDetail() {
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{investigation.immediateResponse}</p>
       </motion.div>
 
-      {/* Generate Analysis Summary */}
-      <motion.div variants={item}>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleGenerateSummary}
-          disabled={isAnalyzing}
-          className="w-full rounded-lg border border-primary/30 bg-primary/5 p-4 text-left transition-colors hover:bg-primary/10 disabled:opacity-60"
-        >
-          <div className="flex items-center gap-3">
-            {isAnalyzing ? (
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            ) : (
-              <Sparkles className="h-5 w-5 text-primary" />
-            )}
+      {/* Generate RCFA Report */}
+      <motion.div variants={item} className="glass-card p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div>
-              <p className="text-sm font-semibold">{isAnalyzing ? 'Generating summary...' : 'Generate Analysis Summary'}</p>
-              <p className="text-xs text-muted-foreground">Build a structured summary from the investigation data and analysis</p>
+              <p className="text-sm font-semibold">AI-Assisted RCFA Report</p>
+              <p className="text-xs text-muted-foreground">11-section audit-ready analysis. AI is triggered only when you click Generate.</p>
             </div>
           </div>
-        </motion.button>
+          {!report ? (
+            <motion.button
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              onClick={runGenerate} disabled={isAnalyzing}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {isAnalyzing ? 'Generating...' : 'Generate RCFA Report'}
+            </motion.button>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button disabled={isAnalyzing} className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-60">
+                  {isAnalyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Regenerate
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Regenerate RCFA report?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will trigger another AI call and replace the cached report. Use only if the current report is unsatisfactory.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={runGenerate}>Yes, regenerate</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
 
         <AnimatePresence>
-          {analysisSummary && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-3 overflow-hidden rounded-lg border border-primary/20 bg-primary/5 p-4"
-            >
-              <div className="flex items-start gap-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-primary">Analysis Summary</p>
-                  <p className="mt-2 text-sm leading-relaxed">{analysisSummary}</p>
+          {report && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-5">
+              {report.generatedBy === 'template' && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>AI generation unavailable; draft report generated using structured template.</span>
                 </div>
-              </div>
+              )}
+              <RcfaReportView report={report} />
             </motion.div>
           )}
         </AnimatePresence>
