@@ -5,7 +5,8 @@ import { AlertTriangle, Upload, ArrowRight, Sparkles, X, FileText } from 'lucide
 import { IncidentType, IncidentSeverity } from '@/types/investigation';
 import { toast } from 'sonner';
 import { parseSopFiles } from '@/utils/parseSop';
-import { mockInvestigations } from '@/data/mockData';
+import { saveInvestigation, newInvestigationId, riskScoreFromSeverity } from '@/data/investigationStore';
+import type { Investigation } from '@/types/investigation';
 
 const incidentTypes: { value: IncidentType; label: string }[] = [
   { value: 'chemical-spill', label: 'Chemical Spill' },
@@ -71,12 +72,32 @@ export default function NewInvestigation() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const target = mockInvestigations[0];
+    if (!formData.labName || !formData.equipment || !formData.incidentType || !formData.severity || !formData.operator || !formData.dateTime || !formData.description) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const id = newInvestigationId();
+    const investigation: Investigation & { sopExcerpts?: any[] } = {
+      id,
+      labName: formData.labName,
+      equipment: formData.equipment,
+      incidentType: formData.incidentType,
+      severity: formData.severity,
+      operator: formData.operator,
+      dateTime: formData.dateTime,
+      description: formData.description,
+      immediateResponse: formData.immediateResponse,
+      status: 'in-progress',
+      createdAt: new Date().toISOString(),
+      riskScore: riskScoreFromSeverity(formData.severity),
+    };
+
     if (attachments.length) {
       const t = toast.loading('Parsing uploaded SOPs...');
       try {
         const excerpts = await parseSopFiles(attachments);
-        (target as any).sopExcerpts = excerpts;
+        investigation.sopExcerpts = excerpts;
         toast.success(`Investigation created — ${excerpts.length} SOP excerpt(s) attached`, { id: t });
       } catch {
         toast.success('Investigation created (SOP parsing skipped)', { id: t });
@@ -84,7 +105,9 @@ export default function NewInvestigation() {
     } else {
       toast.success('Investigation created successfully');
     }
-    navigate(`/investigation/${target.id}`);
+
+    saveInvestigation(investigation);
+    navigate(`/investigation/${id}`);
   };
 
   return (
