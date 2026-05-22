@@ -226,8 +226,8 @@ export default function NewInvestigation() {
         {/* SECTION C */}
         <motion.section variants={item} initial="hidden" animate="show" className="p-6 space-y-4">
           <div className={sectionTitle}>Section C — Investigation Information</div>
-          <RepeatableList label="List of Records Reviewed" items={records} onChange={setRecords} placeholder="e.g. Process SOP, Operating manual" />
-          <RepeatableList label="List of Persons Interacted" items={persons} onChange={setPersons} placeholder="e.g. Pradeep Pal Singh — PA" />
+          <RepeatableList label="List of Records Reviewed" help="Add one record per row" items={records} onChange={setRecords} placeholder="Enter reviewed document" />
+          <RepeatableList label="List of Persons Interacted" help="Add one person per row" items={persons} onChange={setPersons} placeholder="Enter interacted person" />
           <div className="grid gap-3 md:grid-cols-[auto_1fr] md:items-start">
             <label className="flex items-center gap-2 pt-1 text-sm">
               <input type="checkbox" checked={d.priorOccurred} onChange={e=>upd('priorOccurred', e.target.checked)} />
@@ -242,17 +242,19 @@ export default function NewInvestigation() {
           <div className={sectionTitle}>Section D — Incident Narrative</div>
           <div>
             <label className={labelClass}>Summary of Incident *</label>
-            <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="State facts only. Mark estimates/beliefs explicitly." />
+            <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="Enter factual summary of the incident" />
+            <p className={helpClass}>Use factual observations only. Mark estimates explicitly.</p>
           </div>
           <div>
             <label className={labelClass}>Chronology of Events</label>
+            <p className={helpClass + ' mb-2'}>Add one chronology event per row</p>
             <div className="space-y-2">
               {chronology.map((c, i) => (
                 <div key={i} className="flex gap-2">
-                  <input placeholder="Time" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
+                  <input placeholder="hh:mm" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], time: e.target.value}; setChronology(n);
                   }} />
-                  <input placeholder="Event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
+                  <input placeholder="Enter chronology event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], event: e.target.value}; setChronology(n);
                   }} />
                   <button type="button" onClick={() => setChronology(chronology.filter((_,j)=>j!==i))} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
@@ -261,7 +263,7 @@ export default function NewInvestigation() {
               <button type="button" onClick={() => setChronology([...chronology, {time:'', event:''}])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
             </div>
           </div>
-          <RepeatableList label="List of Facts collected during Investigation" items={facts} onChange={setFacts} placeholder="e.g. Maximum design flow rate = 1200 LPH" />
+          <RepeatableList label="List of Facts collected during Investigation" help="Use factual observations only" items={facts} onChange={setFacts} placeholder="Enter fact collected" />
         </motion.section>
 
         {/* SECTION E */}
