@@ -134,7 +134,7 @@ export default function NewInvestigation() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className={labelClass}>Incident Title *</label>
-              <input className={fieldClass} value={d.incidentTitle} onChange={e=>upd('incidentTitle', e.target.value)} required />
+              <input className={fieldClass} placeholder="Enter incident title" value={d.incidentTitle} onChange={e=>upd('incidentTitle', e.target.value)} required />
             </div>
             <div>
               <label className={labelClass}>Classification *</label>
@@ -145,7 +145,7 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Numbers</label>
-              <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="e.g. Not applicable / Process incident" />
+              <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="Enter number or Not applicable" />
             </div>
             <div className="md:col-span-2 grid grid-cols-3 gap-3">
               <div>
@@ -163,27 +163,27 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Name of Injured Person</label>
-              <input className={fieldClass} value={d.injuredName} onChange={e=>upd('injuredName', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter name / designation" value={d.injuredName} onChange={e=>upd('injuredName', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Age / Sex of IP</label>
-              <input className={fieldClass} value={d.ageSex} onChange={e=>upd('ageSex', e.target.value)} />
+              <input className={fieldClass} placeholder="e.g. 32 / Male" value={d.ageSex} onChange={e=>upd('ageSex', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Ticket no. / Department</label>
-              <input className={fieldClass} value={d.ticketDept} onChange={e=>upd('ticketDept', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter ticket no. / department" value={d.ticketDept} onChange={e=>upd('ticketDept', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Company / Contractor</label>
-              <input className={fieldClass} value={d.companyContractor} onChange={e=>upd('companyContractor', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter company / contractor" value={d.companyContractor} onChange={e=>upd('companyContractor', e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Nature of Injury</label>
-              <input className={fieldClass} value={d.natureOfInjury} onChange={e=>upd('natureOfInjury', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter nature of injury / Not applicable" value={d.natureOfInjury} onChange={e=>upd('natureOfInjury', e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Incident Reported by</label>
-              <input className={fieldClass} value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter name / designation" value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
             </div>
           </div>
         </motion.section>
