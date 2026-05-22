@@ -11,6 +11,7 @@ import RiskAssessmentPanel from '@/components/analysis/RiskAssessmentPanel';
 import CorrectiveActionsPanel from '@/components/analysis/CorrectiveActionsPanel';
 import { generateInvestigationReport } from '@/utils/generateReport';
 import { buildFallbackReport } from '@/utils/fallbackReport';
+import RcfaReportView from '@/components/analysis/RcfaReportView';
 import { supabase } from '@/integrations/supabase/client';
 import type { RcfaReport } from '@/types/investigation';
 import {
