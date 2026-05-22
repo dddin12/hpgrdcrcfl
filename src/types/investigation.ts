@@ -1,6 +1,16 @@
-export type Classification = 'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC' | 'NM' | 'PFE';
+export type Classification = 'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC';
 
-export const CLASSIFICATIONS: Classification[] = ['FATAL', 'LWC', 'RWC', 'MTC', 'FAC', 'NM', 'PFE'];
+export const CLASSIFICATIONS: Classification[] = ['FATAL', 'LWC', 'RWC', 'MTC', 'FAC'];
+
+export const CLASSIFICATION_LEGEND: { code: string; meaning: string }[] = [
+  { code: 'FATAL', meaning: 'Fatality' },
+  { code: 'LWC', meaning: 'Lost Workday Case' },
+  { code: 'RWC', meaning: 'Restricted Work Case' },
+  { code: 'MTC', meaning: 'Medical Treatment Case' },
+  { code: 'FAC', meaning: 'First Aid Case' },
+  { code: 'NM', meaning: 'Near Miss' },
+  { code: 'PFE', meaning: 'Process / Property / Fire Event' },
+];
 
 export interface SopExcerpt {
   name: string;
@@ -21,6 +31,8 @@ export interface HpgrdcInvestigation {
   incidentTitle: string;
   classification: Classification | '';
   numbers: string;
+  nm: string;
+  pfe: string;
   injured: { company: number; contractor: number; visitors: number };
   injuredName: string;
   ageSex: string;
