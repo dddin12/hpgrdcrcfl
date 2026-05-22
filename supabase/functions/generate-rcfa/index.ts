@@ -1,194 +1,114 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const SYSTEM_PROMPT = `You are a senior industrial R&D safety investigator producing an audit-ready Root Cause Failure Analysis (RCFA) intended for working lab engineers and HSE staff. Write plainly, technically, and practically — no fluff, no generic safety platitudes.
+const SYSTEMS = [
+  'Communication and Training',
+  'Management of Change',
+  'Incident Investigation/Communication',
+  'Observations and Audits',
+  'Planning & Emergency Response',
+  'Contractors Management',
+  'Quality Assurance',
+  'Mechanical Integrity',
+  'Pre-Start Up Safety Inspection',
+  'Process Technology',
+  'Risk Analysis',
+  'Safe Work Practices, SOP, SMP',
+  'Safety Leadership',
+];
 
-ABSOLUTE GROUNDING RULES:
-- Ground every section strictly in the supplied investigation fields and SOP/manual excerpts.
-- NEVER invent equipment models, people, timestamps, chemicals, instrument numbers, lab names, or document IDs that are not explicitly present in the input.
-- If a fact is not supplied, mark it explicitly under "assumptions" (e.g. "Operator certification status not provided").
-- Reflect the user's actual incident type, equipment, lab, operator, severity, description, and immediate response in every section.
+const SYSTEM_PROMPT = `You are an experienced HPGRDC Incident Investigation Committee member analysing an R&D lab incident. Produce ONLY the four AI-generated sections of the HPGRDC Incident Investigation Report. Write in a concise, factual, engineering-investigation style — like a real HPGRDC committee, not a chatbot, consultant, or essayist.
 
-DOCUMENT CITATION RULES (CRITICAL):
-- SOP/manual excerpts are provided as "[<document name>] page <n>: <text>" (or "section <n>" for non-paginated docs).
-- Whenever a deviation, missing step, procedural gap, negligence, or barrier failure is identified, you MUST cite the source inline using the exact format: "<document name>, p.<n>" (or "section <n>"). Example: "Operator did not perform the warm-up checklist (SOP-DYNO-003, p.4)."
-- Cite the page only when that page actually supports the finding. Do not fabricate page numbers. If no SOP excerpt supports a finding, write "(no SOP reference available)" — do not guess.
-- Populate the references[] array with every page you cite: { source, page, quote (short — 1 short sentence from that page), relevance }.
-- Populate procedureGaps[] with concrete missed/violated steps, each with a sopCitation in the same format.
+ABSOLUTE GROUNDING RULES
+- Ground EVERY output strictly in the user-entered investigation fields and the attached SOP / manual excerpts.
+- NEVER invent names, dates, equipment models, chemicals, instrument tags, departments, or events that are not present in the input. If a fact is missing, leave the field blank or write a single short phrase like "Not provided".
+- Do not summarise the user's narrative back at them. Do not add safety platitudes. No generic language.
 
-TECHNICAL RULES:
-- Be technical, specific, concise. Focus on: incident sequence, deviation from intended state, failed/missing barriers, procedural gaps, human factors, physical causes, system weaknesses.
-- 5 Whys: at least 5 levels of logically chained reasoning. First "why" must restate the actual observed failure.
-- Fishbone uses the 6M categories. Each category should contain at least one cause specific to the equipment named in the input.
-- Corrective and preventive actions must be practical, equipment-specific, and actionable for a working lab (calibration intervals, interlocks, PM checks, training, design changes). Add sopCitation when an action restores compliance with a specific SOP page.
+OUTPUT SECTIONS
+1. whyTree — concise cascading cause analysis matching HPGRDC WHY Tree style.
+   - effect: the observed failure, 1 short line.
+   - cause: { primary, secondary } — direct causes, 1 short line each (secondary optional).
+   - why: 1-3 short items, each one short line — first-level "why" reasons.
+   - deeper: 1-3 short items — next level (deeper mechanisms).
+   - rootWeakness: 1-3 short items — root system/equipment weaknesses.
+   No essays. Each node = a short engineering phrase.
 
-SYSTEMS TO BE REINFORCED (HPGRDC Annexure-E — FIXED LIST, DO NOT MODIFY):
-The following 13 systems are fixed. You MUST NOT rename, reorder, add, or remove any. Return ONLY systems where the incident analysis reveals a real, concrete, lab-actionable deficiency. Use the EXACT system name strings below (verbatim) in the "system" field. Omit any system that has no specific deficiency — do not return blanks, placeholders, or "N/A".
-1. Communication and Training
-2. Management of Change
-3. Incident Investigation/Communication
-4. Observations and Audits
-5. Planning & Emergency Response
-6. Contractors Management
-7. Quality Assurance
-8. Mechanical Integrity
-9. Pre-Start Up Safety Inspection
-10. Process Technology
-11. Risk Analysis
-12. Safe Work Practices, SOP, SMP
-13. Safety Leadership
+2. keyFactors — short, incident-specific factual bullets. Each bullet 1 line.
+   - system: weaknesses in management systems / engineering controls.
+   - human: operator action / training / behaviour factors.
+   - physical: physical equipment / material / environment factors.
+   If a category truly has nothing, return an empty array (renderer prints "Nil").
 
-- Emit the report by calling the emit_rcfa_report tool exactly once. Do not return prose.`;
+3. systemsToReinforce — only include systems with a real, concrete, lab-actionable deficiency grounded in this incident. Use EXACT names from the fixed 13-system list (verbatim):
+${SYSTEMS.map((s, i) => `   ${i + 1}. ${s}`).join('\n')}
+   Do not invent, rename, reorder, add or remove. Omit systems with no specific deficiency — do not return blanks or "N/A".
+
+4. recommendations — practical, low-complexity HPGRDC committee actions only.
+   PREFER: SOP updates, checklist additions, retraining, supervision/counselling, poka-yoke (physical foolproofing), procedural controls, verification steps, visual indicators, periodic maintenance checks, simple mechanical safeguards.
+   STRICTLY AVOID unless severity is FATAL or LWC and clearly demands it: IoT, AI monitoring, digital twins, predictive analytics, advanced automation, expensive instrumentation, interlocks, smart sensors.
+   Each item: short recommendation, plausible responsibility (use a person/role only if it appears in the input; otherwise leave blank), targetDate (leave blank if not derivable), verifiedBy (leave blank if not derivable).
+
+Call emit_report once. Do not return prose.`;
 
 const REPORT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    incidentSummary: { type: 'string' },
-    chronology: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: { time: { type: 'string' }, event: { type: 'string' } },
-        required: ['event'],
-      },
-    },
-    immediateCause: { type: 'string' },
-    fiveWhys: {
-      type: 'array',
-      minItems: 5,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: { why: { type: 'string' }, because: { type: 'string' } },
-        required: ['why', 'because'],
-      },
-    },
-    fishbone: {
+    whyTree: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        man: { type: 'array', items: { type: 'string' } },
-        machine: { type: 'array', items: { type: 'string' } },
-        method: { type: 'array', items: { type: 'string' } },
-        material: { type: 'array', items: { type: 'string' } },
-        measurement: { type: 'array', items: { type: 'string' } },
-        environment: { type: 'array', items: { type: 'string' } },
+        effect: { type: 'string' },
+        cause: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { primary: { type: 'string' }, secondary: { type: 'string' } },
+          required: ['primary'],
+        },
+        why: { type: 'array', items: { type: 'string' } },
+        deeper: { type: 'array', items: { type: 'string' } },
+        rootWeakness: { type: 'array', items: { type: 'string' } },
       },
-      required: ['man', 'machine', 'method', 'material', 'measurement', 'environment'],
+      required: ['effect', 'cause', 'why', 'deeper', 'rootWeakness'],
     },
     keyFactors: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        human: { type: 'array', items: { type: 'string' } },
         system: { type: 'array', items: { type: 'string' } },
+        human: { type: 'array', items: { type: 'string' } },
         physical: { type: 'array', items: { type: 'string' } },
-        organizational: { type: 'array', items: { type: 'string' } },
       },
-      required: ['human', 'system', 'physical', 'organizational'],
-    },
-    barriers: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        existing: { type: 'array', items: { type: 'string' } },
-        failed: { type: 'array', items: { type: 'string' } },
-        missing: { type: 'array', items: { type: 'string' } },
-      },
-      required: ['existing', 'failed', 'missing'],
-    },
-    riskAssessment: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        severity: { type: 'string' },
-        likelihood: { type: 'string' },
-        escalation: { type: 'string' },
-      },
-      required: ['severity', 'likelihood', 'escalation'],
-    },
-    correctiveActions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          description: { type: 'string' },
-          priority: { type: 'string', enum: ['low', 'medium', 'high'] },
-          owner: { type: 'string' },
-          dueWindow: { type: 'string' },
-          sopCitation: { type: 'string' },
-        },
-        required: ['description'],
-      },
-    },
-    preventiveActions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          description: { type: 'string' },
-          priority: { type: 'string', enum: ['low', 'medium', 'high'] },
-          owner: { type: 'string' },
-          dueWindow: { type: 'string' },
-          sopCitation: { type: 'string' },
-        },
-        required: ['description'],
-      },
-    },
-    lessonsLearned: { type: 'array', items: { type: 'string' } },
-    assumptions: { type: 'array', items: { type: 'string' } },
-    procedureGaps: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          issue: { type: 'string' },
-          sopCitation: { type: 'string' },
-        },
-        required: ['issue', 'sopCitation'],
-      },
-    },
-    references: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          source: { type: 'string' },
-          page: { type: 'string' },
-          quote: { type: 'string' },
-          relevance: { type: 'string' },
-        },
-        required: ['source', 'page', 'relevance'],
-      },
+      required: ['system', 'human', 'physical'],
     },
     systemsToReinforce: {
       type: 'array',
-      description: 'Only systems with a real identified deficiency. Use exact names from the fixed 13-system list.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { system: { type: 'string' }, deficiency: { type: 'string' } },
+        required: ['system', 'deficiency'],
+      },
+    },
+    recommendations: {
+      type: 'array',
       items: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          system: { type: 'string' },
-          deficiency: { type: 'string' },
+          recommendation: { type: 'string' },
+          responsibility: { type: 'string' },
+          targetDate: { type: 'string' },
+          verifiedBy: { type: 'string' },
         },
-        required: ['system', 'deficiency'],
+        required: ['recommendation'],
       },
     },
   },
-  required: [
-    'incidentSummary', 'chronology', 'immediateCause', 'fiveWhys',
-    'fishbone', 'keyFactors', 'barriers', 'riskAssessment',
-    'correctiveActions', 'preventiveActions', 'lessonsLearned',
-  ],
+  required: ['whyTree', 'keyFactors', 'systemsToReinforce', 'recommendations'],
 };
 
 function formatSopBlock(sopExcerpts: any[]): string {
-  if (!sopExcerpts.length) return '\n\n(No SOP / manual provided. Do not invent citations — set procedureGaps and references to empty arrays.)';
+  if (!sopExcerpts.length) return '\n\n(No SOP / manual attached — do not invent citations.)';
   const parts: string[] = [];
   for (const s of sopExcerpts) {
     const name = String(s?.name || 'document').slice(0, 160);
@@ -199,7 +119,7 @@ function formatSopBlock(sopExcerpts: any[]): string {
       if (text) parts.push(`[${name}] ${label}: ${text}`);
     }
   }
-  return '\n\nSOP / MANUAL EXCERPTS (cite using "<document name>, p.<n>" or "<document name>, section <n>"):\n' + parts.join('\n\n');
+  return '\n\nATTACHED SOP / MANUAL EXCERPTS:\n' + parts.join('\n\n');
 }
 
 Deno.serve(async (req: Request) => {
@@ -220,35 +140,42 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const investigation = body.investigation;
+    const inv = body.investigation;
     const sopExcerpts = Array.isArray(body.sopExcerpts) ? body.sopExcerpts.slice(0, 3) : [];
-    const sopBlock = formatSopBlock(sopExcerpts);
+    const deepReview = !!body.deepReview;
+    const model = deepReview ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
 
-    const userMsg = `INVESTIGATION DATA (JSON):\n${JSON.stringify({
-      id: investigation.id,
-      labName: investigation.labName,
-      equipment: investigation.equipment,
-      incidentType: investigation.incidentType,
-      severity: investigation.severity,
-      operator: investigation.operator,
-      dateTime: investigation.dateTime,
-      description: investigation.description,
-      immediateResponse: investigation.immediateResponse,
-      immediateCause: investigation.immeditateCause,
-      contributingCauses: investigation.contributingCauses,
-      rootCauseHypothesis: investigation.rootCause,
-      existingCorrectiveActions: investigation.correctiveActions,
-      riskScore: investigation.riskScore,
-    }, null, 2)}${sopBlock}\n\nProduce the RCFA report by calling emit_rcfa_report. Cite SOP/manual pages exactly as instructed. Do not invent any fact.`;
+    const userMsg = `INVESTIGATION DATA (JSON):
+${JSON.stringify({
+  id: inv.id,
+  incidentTitle: inv.incidentTitle,
+  classification: inv.classification,
+  location: inv.location,
+  dateOfIncident: inv.dateOfIncident,
+  timeOfIncident: inv.timeOfIncident,
+  numbers: inv.numbers,
+  injured: inv.injured,
+  injuredName: inv.injuredName,
+  ageSex: inv.ageSex,
+  ticketDept: inv.ticketDept,
+  companyContractor: inv.companyContractor,
+  natureOfInjury: inv.natureOfInjury,
+  reportedBy: inv.reportedBy,
+  recordsReviewed: inv.recordsReviewed,
+  personsInteracted: inv.personsInteracted,
+  priorSimilar: inv.priorSimilar,
+  summary: inv.summary,
+  chronology: inv.chronology,
+  facts: inv.facts,
+}, null, 2)}${formatSopBlock(sopExcerpts)}
+
+Call emit_report once with the four AI sections. Stay strictly grounded in the above. Match HPGRDC investigation tone — concise, factual, practical.`;
 
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userMsg },
@@ -256,12 +183,12 @@ Deno.serve(async (req: Request) => {
         tools: [{
           type: 'function',
           function: {
-            name: 'emit_rcfa_report',
-            description: 'Emit the structured 11-section RCFA report with SOP citations.',
+            name: 'emit_report',
+            description: 'Emit the four HPGRDC AI sections.',
             parameters: REPORT_SCHEMA,
           },
         }],
-        tool_choice: { type: 'function', function: { name: 'emit_rcfa_report' } },
+        tool_choice: { type: 'function', function: { name: 'emit_report' } },
       }),
     });
 
@@ -284,23 +211,20 @@ Deno.serve(async (req: Request) => {
     }
 
     const data = await aiResp.json();
-    const toolCall = data?.choices?.[0]?.message?.tool_calls?.[0];
-    const argsStr = toolCall?.function?.arguments;
-    if (!argsStr) {
-      console.error('No tool call in response', JSON.stringify(data).slice(0, 500));
+    const args = data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (!args) {
+      console.error('No tool call', JSON.stringify(data).slice(0, 500));
       return new Response(JSON.stringify({ error: 'AI returned no structured report' }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
     let report: any;
-    try {
-      report = JSON.parse(argsStr);
-    } catch {
+    try { report = JSON.parse(args); } catch {
       return new Response(JSON.stringify({ error: 'AI returned malformed JSON' }), {
         status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    report.generatedBy = 'ai';
+    report.model = deepReview ? 'pro' : 'flash';
 
     return new Response(JSON.stringify({ report }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -22,8 +22,8 @@ export default function AppSidebar() {
       </div>
 
       <div className="px-4 py-3 border-b border-border">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">RCFA Investigation System</p>
-        <p className="text-[9px] text-muted-foreground">Root Cause Failure Analysis</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">HPGRDC Investigation System</p>
+        <p className="text-[9px] text-muted-foreground">Incident Investigation Reports</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
