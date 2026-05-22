@@ -71,6 +71,18 @@ export default function NewInvestigation() {
       toast.error('Fill incident title, classification, location, date, and summary');
       return;
     }
+    const invalid = findInvalidRows({
+      chronology, facts,
+      recordsReviewed: records, personsInteracted: persons,
+    });
+    if (invalid.length) {
+      toast.error(
+        `Please fix ${invalid.length} invalid row(s): ` +
+        invalid.slice(0, 3).map(r => `${r.section} #${r.index} ("${r.text.slice(0, 20)}")`).join(', ') +
+        (invalid.length > 3 ? '…' : '')
+      );
+      return;
+    }
     const id = newInvestigationId();
     const t = toast.loading('Saving investigation...');
     let sopExcerpts: any[] = [];
