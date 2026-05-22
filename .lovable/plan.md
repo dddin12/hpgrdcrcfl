@@ -1,111 +1,215 @@
-## HPGRDC Report & Form Fixes
+## HPGRDC Incident Investigation Report Generator — Final Consolidated Plan
 
-Targeted fixes to chronology rendering, classification layout, multi-line fields, WHY Tree visuals, AI editability, recommendation tone, logos, placeholders, and date formatting. No dashboard or backend logic changes.
+Single consolidated plan covering classification redesign, verbatim user-input rendering, strict AI grounding/anti-hallucination, WHY-tree diagram, validation, multi-line preservation, recommendation controls, manual AI editing, report aesthetics, and placeholder cleanup. No dashboard/backend/auth changes.
 
-### 1. Chronology — render all rows, no drops, no duplicates
-`src/utils/generateReport.ts` + `HpgrdcReportView.tsx`:
-- Iterate the full `inv.chronology` array; render each as a numbered `<li>`.
-- Merge `time` into the sentence naturally: if `time` exists and event doesn't already start with/contain it, output `"At {time}, {event}"` (lowercase first letter of event when prepending); else just `{event}`. Strip leading "At " duplication.
-- De-dupe: trim, skip entries where both time and event are empty.
+---
 
-**Validation (form-side, `NewInvestigation.tsx`)**:
-- Add `isLikelyGibberish(s)` util in `src/utils/validation.ts`: flags strings <6 chars with no vowel, >50% digits mixed with letters randomly, or matching `/^[a-z0-9]{3,}$/i` without spaces and not in a small allow-list of legit short tokens.
-- On "Generate Report" click, scan chronology + facts + records + persons; if any row trips the heuristic, show a blocking toast listing the offending rows. User must fix or remove.
+### A. Classification input + legend
 
-### 2. Classification table — match PDF layout exactly
-`generateReport.ts`:
-- Header row: 7 separate `<th>` cells (FATAL, LWC, RWC, MTC, FAC, NM, PFE), equal width via `colgroup`.
-- Selected cell: black background, white bold text. Others: empty.
-- Directly under PFE column, render small italic `"Process incident"` label always (matches uploaded sample).
-- Use a dedicated `<table class="cls">` separate from the title/numbers rows to prevent `colspan` collisions causing NM/PFE overlap.
-- "Numbers" row prints `inv.numbers` literally (no fallback to blank — show "Not applicable" if user typed it).
+`src/types/investigation.ts`
+- Narrow `Classification` to `'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC'`.
+- Add fields to `HpgrdcInvestigation`: `nm: string`, `pfe: string`.
 
-Same fix in `HpgrdcReportView.tsx` (on-screen mirror).
+`src/pages/NewInvestigation.tsx`
+- Dropdown lists only FATAL/LWC/RWC/MTC/FAC.
+- Separate text inputs **NM** (placeholder `Not Applicable / Near Miss details`) and **PFE** (placeholder `Process incident / Property damage / Equipment damage`).
+- Small muted legend block beside the section:
+  - FATAL — Fatality · LWC — Lost Workday Case · RWC — Restricted Work Case · MTC — Medical Treatment Case · FAC — First Aid Case · NM — Near Miss · PFE — Process / Property / Fire Event.
+- Numbers field kept separate (`e.g. Not applicable`).
 
-### 3. Records Reviewed / Persons Interacted — preserve line breaks
-- Already stored as `string[]`. Render each item as its own `<div>` (not joined with `<br/>` only — wrap each in a block so line-height is preserved and copy-paste keeps lines).
-- On-screen view: same — each on its own row.
+`investigationStore.ts` `canonicalInputs`: include `nm`, `pfe`.
 
-### 4. WHY Tree — bordered hierarchical layout
-Redesign `whyTree` rendering in both view and download:
+### B. Classification table rendering
+
+`generateReport.ts` + `HpgrdcReportView.tsx`
+- 7 fixed columns with `colgroup` (14.28% each): FATAL | LWC | RWC | MTC | FAC | NM | PFE.
+- Header row: column names; selected category cell filled black.
+- Value row: `inv.nm` under NM, `inv.pfe` under PFE, blank elsewhere — no collapsing.
+- Numbers row prints `inv.numbers` verbatim (no fallback to blank).
+
+### C. User inputs are source of truth (verbatim)
+
+- Incident title, classification, injury details, records reviewed, persons interacted, summary, chronology, facts, records collected, photographs are read **only** from `inv.*` and rendered verbatim.
+- Edge-function output schema stays restricted to the four AI sections; never returns rewritten user inputs.
+
+### D. Validation — block gibberish before generation
+
+`src/utils/validation.ts`
+- Extend `isLikelyGibberish` with blocklist: `test`, `dummy`, `asdf`, `qwerty`, `hggg`, `xxxx`, `tbd`, `temp`, `lorem`, `abcd`, `1234`.
+- Token rule: any whitespace token ≥5 chars with no vowel → gibberish.
+- Keep existing mixed-alphanumeric heuristics.
+
+`NewInvestigation.tsx`
+- On Generate, scan chronology, facts, records reviewed, persons interacted.
+- If any invalid: blocking toast *"Invalid investigation input detected. Please correct highlighted rows before report generation."* and mark offending inputs with `border-destructive`. Do not call the edge function.
+
+### E. Chronology rendering
+
+- Iterate full `inv.chronology` array, render numbered `<ol>` items.
+- `formatChronologyLine(time, event)`:
+  - Trim both. Skip if both empty.
+  - If `event` already contains the time substring → output `event` unchanged.
+  - Else if `time` present → `"At {time}, {event with first letter lowercased}"`.
+  - Else → `event`.
+- No de-duplication of distinct rows; no auto-merge.
+
+### F. Multi-line field preservation
+
+- Records Reviewed, Persons Interacted, Facts, Records Collected: render each item as its own `<div>` block (one row per item) in both HTML download and on-screen view. No `join`, no `<br/>` collapsing.
+
+### G. WHY Tree — bordered hierarchical diagram
+
+Both `generateReport.ts` and `HpgrdcReportView.tsx`:
+- Single vertical bordered diagram, B&W, `table-layout: fixed`, `word-wrap: break-word`.
+- Five labelled levels with downward connector cells:
+
+```text
++-----------------+
+| Effect          |
++--------+--------+
+         |
++--------+--------+
+| Cause           |
++--------+--------+
+         |
++--------+--------+
+| Why             |
++--------+--------+
+         |
++--------+--------+
+| Deeper Cause    |
++--------+--------+
+         |
++--------+--------+
+| Root Weakness   |
++-----------------+
 ```
-┌─────────── Effect ───────────┐
-│         {effect text}        │
-└──────────────┬───────────────┘
-┌───── Cause: Primary ─────┬───── Secondary ─────┐
-└──────────────┬──────────────────────┬──────────┘
-┌───── Why (level 1) ─────┐  ...columns per item
-┌───── Why (deeper) ─────┐
-┌───── Root Weakness ─────┐
+
+- No JSON, no plain bullet list, no narrative paragraph.
+
+### H. AI scope and grounding (`supabase/functions/generate-rcfa/index.ts`)
+
+Model: `google/gemini-2.5-flash` (default). Output strictly limited to `{ whyTree, keyFactors, systemsToReinforce, recommendations }`.
+
+**Grounded vocabulary preprocessing**
+- Build `groundedTerms` (lowercased token set + exact phrases) from: `summary`, `chronology[].event`, `facts`, `recordsReviewed`, `personsInteracted`, `sopExcerpts`.
+- Inject into prompt as `GROUNDED VOCABULARY: ...` for the model to self-check.
+
+**System prompt rules**
+- Absolute grounding: never invent names, dates, chemicals, operating values, equipment models, safeguards, procedural steps, or recommendations not supported by inputs.
+- Forbidden concepts unless they literally occur in inputs/SOP excerpts: SCADA, MFC, syringe pump, sensor, interlock, IoT, smart sensor, predictive analytics, automation, digital twin, AI monitoring, predictive maintenance.
+- No hypotheticals (alternate technical possibilities, undocumented deviations, control-system assumptions).
+- When evidence missing → output literal `"No evidence available during investigation."`
+- No false certainty — prefer *during investigation it was observed*, *based on available investigation inputs*, *appears associated with*, *likely contributed*.
+- No blame language — never use *negligence*, *incompetence*, *careless*, *misconduct*, *operator fault*. Use neutral wording (`valve was not opened`, `step was missed`, `procedure deviation observed`).
+- No operational/emergency/isolation/shutdown guidance unless grounded in SOP excerpts; otherwise `"No verified procedural guidance available in uploaded investigation records."`
+- Recommendation authority limits: prefer SOP update, checklist reinforcement, operator counselling/training, engineering safeguard review, visual indication, procedural verification, equipment manual review, alternate analysis method, feasibility study. Avoid plant redesign, enterprise software, major CAPEX, AI/predictive systems.
+- Never declare incident closed, root cause confirmed, action complete, or risk eliminated.
+- Restrained PSU/committee tone — no consulting/motivational/SaaS language.
+
+**Server-side post-filter (after model response, before returning)**
+1. Walk every string in `whyTree`, `keyFactors.*`, `systemsToReinforce[].deficiency`, `recommendations[].recommendation`.
+2. If a forbidden term appears AND is not in `groundedTerms`:
+   - Array items (why/deeper/rootWeakness, keyFactors): replace with `"No evidence available during investigation."`
+   - Recommendations: drop the item.
+   - System deficiency: clear to empty.
+3. Blame regex (`negligence|incompetence|careless(ly)?|misconduct|operator fault|at fault`) → strip clause / replace with neutral phrasing.
+4. Certainty markers (`confirmed root cause`, `definitively`, `proves that`, `clearly caused`) → `appears associated with` / `likely contributed to`.
+5. Recommendations containing `interlock|IoT|smart sensor|predictive|automation|digital twin` when classification ∉ {FATAL, LWC} → replace term with neutral equivalent (`interlock` → `engineering safeguard`, others → `periodic verification check`).
+6. Strip `responsibility`/`targetDate`/`verifiedBy` from any recommendation where the value isn't present in inputs.
+
+### I. Key Factors style
+
+- Each bullet is one short factual line.
+- Empty list rendered as `Nil`.
+- Prompt enforces "no consulting tone, no generic safety jargon, no speculation."
+
+### J. Systems to be Reinforced
+
+- Renderer always emits all 13 fixed rows in fixed order. AI fills `deficiency` only; blanks allowed.
+- Prompt forbids filling Contractor Management / Safety Leadership / MOC unless inputs mention them.
+
+### K. Recommendation control
+
+Covered in H (prompt + post-filter). Leave `responsibility/targetDate/verifiedBy` blank unless inputs contain them.
+
+### L. Edit AI Analysis
+
+Already implemented (`EditAiAnalysisDialog.tsx` + `updateAiReport`). Confirm:
+- Writes back to `inv.aiReport` only.
+- Does not call edge function.
+- Does not modify `aiInputHash` (stale-warning still reflects real input changes).
+- Downloaded HTML reads the edited values.
+
+### M. Report aesthetics
+
+- HPCL logo (left) + HP Green R&D Centre logo (right), centered title:
+
+```text
+Incident Investigation Report
+HPGRDC.
 ```
-- Use labeled bordered tables with column headers `Effect | Cause | Why`.
-- Each level draws a downward connector (simple bordered cell, no SVG).
-- No JSON-looking output, no plain bullets.
 
-### 5. AI prompt — practical wording
-`supabase/functions/generate-rcfa/index.ts`:
-- Strengthen the forbidden-terms list: `interlock`, `IoT`, `AI monitoring`, `digital twin`, `smart sensor`, `predictive analytics`, `expensive automation`.
-- Allow `interlock` only when classification is FATAL/LWC OR when user-entered facts/narrative literally contain the word.
-- Prefer phrasings: SOP update, checklist, operator counselling/training, visual indication, alternate analysis method, safeguard against backpressure, engineering control feasibility study.
-- Add example phrasing in the system prompt: `"No safeguard available to protect Wet Gas Meter in case of back pressure."`
+- Logos embedded as base64 data URLs at generation time (offline-safe).
+- B&W only; `table-layout: fixed`; `word-wrap: break-word`; 5pt cell padding; 1px solid black borders; A4 18mm margins.
+- No cards, gradients, shadows, SaaS chrome.
 
-### 6. Edit AI Analysis (manual override, no re-call)
-`InvestigationDetail.tsx`:
-- Add "Edit AI Analysis" button next to "View Report" / "Download".
-- Opens a new `EditAiAnalysisDialog.tsx` (modal) with four collapsible sections:
-  - WHY Tree (text inputs for effect, primary/secondary cause; comma-or-newline lists for why/deeper/rootWeakness)
-  - Key Factors (system / human / physical — each a textarea, one per line)
-  - Systems to Reinforce (13 rows, deficiency input per row, blank allowed)
-  - Recommendations (editable table: add/remove rows; columns recommendation/responsibility/targetDate/verifiedBy)
-- On Save: writes back to `inv.aiReport` via store; does NOT touch `aiInputHash` (so "inputs changed" warning stays accurate); does NOT call the edge function.
-- Downloaded HTML and on-screen view both read the edited values automatically.
+### N. Supporting Photographs
 
-### 7. Report aesthetics — logos & polish
-- Add two header logos to downloaded report and on-screen report: `public/hpcl-logo.png` (left) and `public/hpgrdc-logo.png` (right), with title centered between them. Use existing `src/assets/hp-logo.png` and `src/assets/rnd-logo.png` if present; copy to `public/` for HTML download embedding via data-URL at generation time (so the downloaded standalone HTML still shows logos offline).
-- Convert logos to base64 inside `generateReport.ts` (fetch from `import.meta.env.BASE_URL + 'hp-logo.png'`, read as data URL) before injecting into the HTML string.
-- Tighten table CSS: fixed `table-layout: fixed`, `word-wrap: break-word`, consistent 5pt padding, no compressed columns. Add `colgroup` widths to every table.
-- Pure B&W (no greys except header `#eee`), 1px solid black borders, A4 18mm margins.
+- Heading `Supporting Photographs:` always rendered.
+- If photos present: grid with `Figure N: {caption||name}`.
+- If absent: blank bordered placeholder block.
 
-### 8. Supporting Photographs
-Already handled; verify: if `photographs` empty → render heading + empty bordered block. If present → grid with `Figure N: {caption||name}`. No code change unless QA reveals issue.
+### O. Placeholder + helper text cleanup
 
-### 9–10. Placeholder cleanup
-`NewInvestigation.tsx`: replace every `placeholder=` containing a real name/date/document with generic versions:
+`NewInvestigation.tsx`: audit every placeholder. Replace any names/dates/products (Pradeep Pal Singh, Madan Kumar, Sarah, HPLC, Wet Gas Meter, 04 Sep 2020, etc.) with generic versions:
 - Incident Title → `Enter incident title`
 - Location → `Enter location`
 - Reported by / Persons / Witnesses → `Enter name / designation`
-- Records Reviewed inputs → `Enter reviewed document`
-- Persons Interacted inputs → `Enter interacted person`
-- Chronology event input → `Enter chronology event`
-- Chronology time input → `dd-mm-yyyy hh:mm`
-- Facts input → `Enter fact collected`
-- Report Submission → `Enter report submission date`
+- Records Reviewed → `Enter reviewed document`
+- Persons Interacted → `Enter interacted person`
+- Chronology event → `Enter chronology event`
+- Chronology time → `dd-mm-yyyy hh:mm`
+- Facts → `Enter fact collected`
+- Records Collected → `Enter record collected`
+- Report Submission → `dd-mm-yyyy`
 - Numbers → `e.g. Not applicable`
 
-Audit every `placeholder=` in the file and replace any containing names, dates, or specific incident text.
-
-### 11. Date/time consistency
-- All datetime fields use placeholder `dd-mm-yyyy hh:mm`; date-only use `dd-mm-yyyy`.
-- Keep inputs as plain text (no `type="date"`) to match the format consistently and to allow approximate values.
-- Add helper text under datetime fields: `Format: dd-mm-yyyy hh:mm`.
-
-### 12. UI helper text
-Below each multi-row section header, add muted small text:
+Helper text under multi-row section headers:
 - Records Reviewed → `Add one record per row`
 - Persons Interacted → `Add one person per row`
 - Chronology → `Add one chronology event per row`
 - Facts → `Use factual observations only`
 
-### 13. Preserve UI
-No changes to dark theme, sidebar, dashboard logic, or section card styling. Only placeholder text, helper text, validation logic, report rendering, and new edit dialog are touched.
+### P. Date/time format
+
+- Date fields → plain text, placeholder `dd-mm-yyyy`.
+- DateTime fields → plain text, placeholder `dd-mm-yyyy hh:mm`.
+- Time fields → `hh:mm am/pm`.
+- No native `type="date"`.
+
+### Q. Cache / cost control (already in place — verify)
+
+- AI runs only on Generate click.
+- Cached by SHA-1 input hash on `inv`.
+- Manual edits via dialog do not invalidate cache or trigger AI.
+- Download uses stored report.
+
+### R. AI is assistive only
+
+- Prompt forbids declaring closure/confirmation/completion/risk-eliminated.
+- UI keeps investigator-driven flow; no auto-closure actions.
+
+---
 
 ### Files touched
-- **Edit**: `src/utils/generateReport.ts`, `src/components/analysis/HpgrdcReportView.tsx`, `src/pages/NewInvestigation.tsx`, `src/pages/InvestigationDetail.tsx`, `src/data/investigationStore.ts` (add `updateAiReport` setter), `supabase/functions/generate-rcfa/index.ts`
-- **New**: `src/utils/validation.ts`, `src/components/analysis/EditAiAnalysisDialog.tsx`
-- **Assets**: ensure `public/hp-logo.png` and `public/rnd-logo.png` exist (copy from `src/assets/` if needed)
+
+- **Edit**: `src/types/investigation.ts`, `src/pages/NewInvestigation.tsx`, `src/utils/validation.ts`, `src/utils/generateReport.ts`, `src/components/analysis/HpgrdcReportView.tsx`, `src/data/investigationStore.ts`, `supabase/functions/generate-rcfa/index.ts`
+- **No new files.**
 
 ### Out of scope
-- Real PDF (still HTML print-ready)
-- Backend persistence (still localStorage)
-- Deep Review Mode UI toggle
-- Dashboard changes
+
+- Real PDF export (remains print-ready HTML).
+- Backend persistence (remains localStorage).
+- Dashboard / sidebar / auth.
+- Deep Review Mode UI toggle.
