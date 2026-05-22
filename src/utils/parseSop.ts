@@ -32,7 +32,7 @@ async function parsePdf(file: File): Promise<string> {
 }
 
 async function parseDocx(file: File): Promise<string> {
-  const mammoth: any = await import('mammoth/mammoth.browser');
+  const mammoth: any = await import('mammoth/mammoth.browser.js');
   const buf = await file.arrayBuffer();
   const res = await mammoth.extractRawText({ arrayBuffer: buf });
   return res.value || '';
