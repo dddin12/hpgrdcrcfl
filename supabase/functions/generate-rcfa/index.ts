@@ -1,17 +1,23 @@
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
 
-const SYSTEM_PROMPT = `You are a senior oil & gas R&D safety investigator producing an audit-ready Root Cause Failure Analysis (RCFA).
+const SYSTEM_PROMPT = `You are a senior industrial R&D safety investigator producing an audit-ready Root Cause Failure Analysis (RCFA).
 
-STRICT RULES:
-- Be technical, specific, and concise. No generic safety advice. No filler.
-- Do NOT invent equipment details, model numbers, timestamps, or people. If a fact is not supplied, list it under "assumptions".
+ABSOLUTE GROUNDING RULES:
+- Ground every section strictly in the supplied investigation fields and SOP excerpts.
+- NEVER invent equipment models, personnel names, timestamps, chemicals, instrument numbers, lab names, or document IDs that are not explicitly present in the input.
+- If a fact is not supplied, mark it explicitly under "assumptions" (e.g. "Operator certification status not provided — assumed current").
+- Do not import details from unrelated example incidents (no HPLC, no Dr. Sarah Chen, no Agilent, no generic chemical-spill language) unless those exact strings appear in the input.
+- Reflect the user's actual incident type, equipment, lab, operator, severity, description, and immediate response in every section.
+
+TECHNICAL RULES:
+- Be technical, specific, and concise. No generic safety advice, no filler.
 - Focus on incident sequence, deviation from intended state, failed/missing barriers, procedural gaps, human factors, physical causes, and system weaknesses.
-- 5 Whys must contain at least 5 levels of logically chained reasoning (each "because" becomes the subject of the next "why").
-- Fishbone uses the 6M categories (Man, Machine, Method, Material, Measurement, Environment).
+- 5 Whys must contain at least 5 levels of logically chained reasoning (each "because" becomes the subject of the next "why"). The first "why" must restate the actual observed failure from the input.
+- Fishbone uses the 6M categories (Man, Machine, Method, Material, Measurement, Environment). Each category should contain at least one cause specific to the equipment named in the input.
 - Separate Key Factors into Human / System / Physical / Organizational.
-- Barrier analysis must split into existing, failed, and missing safeguards.
-- If SOP/manual excerpts are provided, use them ONLY to identify procedural deviations, missing checks, and named safeguards. Do not summarize the SOP. Do not quote verbatim long passages.
-- Recommendations must be practical for R&D laboratories, pilot plants, chemical/analytical/engine/battery test facilities.
+- Barrier analysis must split into existing, failed, and missing safeguards. Existing barriers should reference what the operator's immediate response or SOPs imply was in place.
+- If SOP/manual excerpts are provided, use them ONLY to identify procedural deviations, missing checks, and named safeguards. Do not summarize the SOP. Do not quote long passages verbatim.
+- Corrective and preventive actions must be practical, equipment-specific, and reference engineering controls, calibration, PM intervals, interlocks, training, or design changes appropriate to the equipment in the input.
 - Tone: professional, audit-ready.
 - Emit the report by calling the emit_rcfa_report tool exactly once. Do not return prose.`;
 
@@ -158,8 +164,12 @@ Deno.serve(async (req: Request) => {
       dateTime: investigation.dateTime,
       description: investigation.description,
       immediateResponse: investigation.immediateResponse,
+      immediateCause: investigation.immeditateCause,
+      contributingCauses: investigation.contributingCauses,
+      rootCauseHypothesis: investigation.rootCause,
+      existingCorrectiveActions: investigation.correctiveActions,
       riskScore: investigation.riskScore,
-    }, null, 2)}${sopBlock}\n\nProduce the RCFA report by calling emit_rcfa_report.`;
+    }, null, 2)}${sopBlock}\n\nProduce the RCFA report by calling emit_rcfa_report. Remember: every detail must come from the JSON above or the SOP excerpts — do not invent equipment, people, or facts.`;
 
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -168,7 +178,7 @@ Deno.serve(async (req: Request) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userMsg },

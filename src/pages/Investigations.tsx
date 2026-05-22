@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Flame, Zap, FlaskConical } from 'lucide-react';
-import { mockInvestigations } from '@/data/mockData';
+import { listInvestigations } from '@/data/investigationStore';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
 
 const incidentIcons: Record<string, typeof Flame> = {
@@ -15,14 +15,15 @@ const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } 
 const item = { hidden: { opacity: 0, x: -20 }, show: { opacity: 1, x: 0 } };
 
 export default function Investigations() {
+  const all = listInvestigations();
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">All Investigations</h1>
-        <p className="text-sm text-muted-foreground">{mockInvestigations.length} total investigations</p>
+        <p className="text-sm text-muted-foreground">{all.length} total investigations</p>
       </div>
       <motion.div variants={container} initial="hidden" animate="show" className="glass-card divide-y divide-border">
-        {mockInvestigations.map((inv) => {
+        {all.map((inv) => {
           const Icon = incidentIcons[inv.incidentType] || AlertTriangle;
           return (
             <motion.div key={inv.id} variants={item}>

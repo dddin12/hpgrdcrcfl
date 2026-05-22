@@ -1,54 +1,92 @@
-import { CheckCircle, Clock, AlertCircle } from 'lucide-react';
-import { Investigation, CorrectiveAction } from '@/types/investigation';
+import { motion } from 'framer-motion';
+import { CheckCircle2, ShieldCheck, Wrench, Sparkles } from 'lucide-react';
+import type { Investigation, RcfaReport, RcfaActionItem } from '@/types/investigation';
+import EmptyAnalysisState from './EmptyAnalysisState';
 
 interface Props {
   investigation: Investigation;
+  report?: RcfaReport | null;
 }
 
-const mockActions: CorrectiveAction[] = [
-  { id: 'CA-001', description: 'Configure automated PM alerts in CMMS for all HPLC systems per SOP-MAINT-005 Section 4.2', priority: 'high', assignee: 'Maintenance Lead', dueDate: '2026-03-12', status: 'in-progress', sopReference: 'SOP-MAINT-005' },
-  { id: 'CA-002', description: 'Replace pump seals on all Agilent 1260 units in Lab B (3 units)', priority: 'high', assignee: 'Service Engineer', dueDate: '2026-03-13', status: 'pending', sopReference: 'Agilent 1260 Service Manual Ch. 7' },
-  { id: 'CA-003', description: 'Review and update batch pressure parameters — max PSI should not exceed 400 bar', priority: 'medium', assignee: 'Dr. Sarah Chen', dueDate: '2026-03-15', status: 'pending' },
-  { id: 'CA-004', description: 'Conduct refresher training on HPLC pre-run inspection checklist', priority: 'medium', assignee: 'Lab Manager', dueDate: '2026-03-20', status: 'pending' },
-  { id: 'CA-005', description: 'Stock critical spare parts (pump seals, check valves) in lab inventory', priority: 'low', assignee: 'Procurement', dueDate: '2026-03-25', status: 'pending' },
-];
-
-const statusIcons = {
-  pending: <AlertCircle className="h-4 w-4 text-muted-foreground" />,
-  'in-progress': <Clock className="h-4 w-4 text-warning" />,
-  completed: <CheckCircle className="h-4 w-4 text-success" />,
+const priorityStyles: Record<string, string> = {
+  high: 'bg-critical/15 text-critical border-critical/30',
+  medium: 'bg-warning/15 text-warning border-warning/30',
+  low: 'bg-info/15 text-info border-info/30',
 };
 
-const priorityStyles = {
-  high: 'bg-critical/15 text-critical',
-  medium: 'bg-warning/15 text-warning',
-  low: 'bg-info/15 text-info',
-};
-
-export default function CorrectiveActionsPanel({ investigation }: Props) {
+function ActionList({ items, kind }: { items: RcfaActionItem[]; kind: 'corrective' | 'preventive' }) {
+  if (!items?.length) {
+    return <p className="text-xs text-muted-foreground italic px-1">None proposed by the AI for this category.</p>;
+  }
   return (
-    <div>
-      <p className="mb-4 text-xs text-muted-foreground">AI-proposed corrective actions based on root cause analysis and referenced SOPs</p>
-
-      <div className="space-y-3">
-        {mockActions.map((action) => (
-          <div key={action.id} className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-4">
-            {statusIcons[action.status]}
-            <div className="flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-muted-foreground">{action.id}</span>
-                <span className={`status-badge ${priorityStyles[action.priority]}`}>{action.priority.toUpperCase()}</span>
-              </div>
-              <p className="mt-1 text-sm">{action.description}</p>
-              <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                {action.assignee && <span>Assignee: <span className="text-foreground">{action.assignee}</span></span>}
-                {action.dueDate && <span>Due: <span className="text-foreground">{action.dueDate}</span></span>}
-                {action.sopReference && <span>Ref: <span className="text-primary">{action.sopReference}</span></span>}
-              </div>
+    <div className="space-y-3">
+      {items.map((a, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+          className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-4"
+        >
+          {kind === 'corrective' ? <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-warning" /> : <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />}
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{kind === 'corrective' ? 'CA' : 'PA'}-{String(i + 1).padStart(3, '0')}</span>
+              {a.priority && (
+                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${priorityStyles[a.priority]}`}>{a.priority}</span>
+              )}
+            </div>
+            <p className="mt-1 text-sm">{a.description}</p>
+            <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
+              {a.owner && <span>Owner: <span className="text-foreground">{a.owner}</span></span>}
+              {a.dueWindow && <span>Due: <span className="text-foreground">{a.dueWindow}</span></span>}
             </div>
           </div>
-        ))}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+export default function CorrectiveActionsPanel({ report }: Props) {
+  if (!report) return <EmptyAnalysisState label="Corrective & preventive actions not generated yet" />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-primary" />
+        <p className="text-xs text-muted-foreground">AI-proposed actions grounded in the incident details and any SOP excerpts you attached.</p>
       </div>
+
+      <div>
+        <div className="mb-2 flex items-center gap-2">
+          <Wrench className="h-4 w-4 text-warning" />
+          <h3 className="text-sm font-semibold">Corrective Actions</h3>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Immediate containment</span>
+        </div>
+        <ActionList items={report.correctiveActions || []} kind="corrective" />
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          <h3 className="text-sm font-semibold">Preventive Actions</h3>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Long-term improvements</span>
+        </div>
+        <ActionList items={report.preventiveActions || []} kind="preventive" />
+      </div>
+
+      {report.lessonsLearned?.length ? (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold text-primary">Lessons Learned</h3>
+          </div>
+          <ul className="space-y-1.5 text-sm">
+            {report.lessonsLearned.map((l, i) => (
+              <li key={i} className="flex gap-2"><span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />{l}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

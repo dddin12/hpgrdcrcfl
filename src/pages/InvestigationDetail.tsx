@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FileSearch, GitBranch, BarChart3, Shield, FileDown, Lightbulb, ChevronRight, Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { getInvestigation } from '@/data/investigationStore';
 import { mockInvestigations } from '@/data/mockData';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
 import FiveWhysPanel from '@/components/analysis/FiveWhysPanel';
@@ -37,7 +38,7 @@ export default function InvestigationDetail() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<RcfaReport | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const investigation = mockInvestigations.find(inv => inv.id === id) || mockInvestigations[0];
+  const investigation = getInvestigation(id) || mockInvestigations[0];
 
   const handleExport = async () => {
     if (!report) {
@@ -222,11 +223,11 @@ export default function InvestigationDetail() {
             transition={{ duration: 0.2 }}
             className="p-6"
           >
-            {activeTab === 'five-whys' && <FiveWhysPanel investigation={investigation} />}
-            {activeTab === 'fishbone' && <FishbonePanel investigation={investigation} />}
-            {activeTab === 'cause-tree' && <CauseTreePanel investigation={investigation} />}
-            {activeTab === 'risk' && <RiskAssessmentPanel investigation={investigation} />}
-            {activeTab === 'actions' && <CorrectiveActionsPanel investigation={investigation} />}
+            {activeTab === 'five-whys' && <FiveWhysPanel investigation={investigation} report={report} />}
+            {activeTab === 'fishbone' && <FishbonePanel investigation={investigation} report={report} />}
+            {activeTab === 'cause-tree' && <CauseTreePanel investigation={investigation} report={report} />}
+            {activeTab === 'risk' && <RiskAssessmentPanel investigation={investigation} report={report} />}
+            {activeTab === 'actions' && <CorrectiveActionsPanel investigation={investigation} report={report} />}
           </motion.div>
         </AnimatePresence>
       </motion.div>

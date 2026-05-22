@@ -1,27 +1,63 @@
-import { Investigation } from '@/types/investigation';
+import type { Investigation, RcfaReport } from '@/types/investigation';
 
 interface Props {
   investigation: Investigation;
+  report?: RcfaReport | null;
 }
 
 const severityLabels = ['Negligible', 'Minor', 'Moderate', 'Major', 'Catastrophic'];
 const likelihoodLabels = ['Rare', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'];
 
-function getCellColor(s: number, l: number): string {
+function cellColor(s: number, l: number) {
   const score = s * l;
   if (score >= 15) return 'bg-critical/80 text-critical-foreground';
   if (score >= 10) return 'bg-warning/60 text-warning-foreground';
-  if (score >= 5) return 'bg-info/40 text-foreground';
+  if (score >= 5)  return 'bg-info/40 text-foreground';
   return 'bg-success/30 text-foreground';
 }
 
-export default function RiskAssessmentPanel({ investigation }: Props) {
-  const currentSeverity = 4;
-  const currentLikelihood = 4;
+function severityIndex(sev?: string): number {
+  const v = (sev || '').toLowerCase();
+  if (v.includes('catastroph') || v.includes('critical')) return 5;
+  if (v.includes('major') || v.includes('high')) return 4;
+  if (v.includes('moderate') || v.includes('medium')) return 3;
+  if (v.includes('minor') || v.includes('low')) return 2;
+  if (v.includes('negligib')) return 1;
+  return 0;
+}
+
+function likelihoodIndex(l?: string): number {
+  const v = (l || '').toLowerCase();
+  if (v.includes('almost') || v.includes('certain')) return 5;
+  if (v.includes('likely')) return 4;
+  if (v.includes('possible')) return 3;
+  if (v.includes('unlikely')) return 2;
+  if (v.includes('rare')) return 1;
+  return 0;
+}
+
+function riskBand(score: number) {
+  if (score >= 15) return { label: 'HIGH — Immediate Action Required', color: 'text-critical', note: 'Corrective actions must be implemented within 48 hours.' };
+  if (score >= 10) return { label: 'ELEVATED — Action Required', color: 'text-warning', note: 'Plan and implement corrective actions within 2 weeks.' };
+  if (score >= 5)  return { label: 'MODERATE — Monitor', color: 'text-info', note: 'Track and re-assess at next periodic review.' };
+  return { label: 'LOW — Acceptable', color: 'text-success', note: 'Maintain existing controls and continue monitoring.' };
+}
+
+export default function RiskAssessmentPanel({ investigation, report }: Props) {
+  // Derive S × L from the AI report when available; otherwise fall back to investigation severity.
+  const sevFromReport = severityIndex(report?.riskAssessment?.severity);
+  const likFromReport = likelihoodIndex(report?.riskAssessment?.likelihood);
+  const sevFromInv = severityIndex(investigation.severity);
+  const currentSeverity = sevFromReport || sevFromInv || 3;
+  const currentLikelihood = likFromReport || 3;
+  const score = currentSeverity * currentLikelihood;
+  const band = riskBand(score);
 
   return (
     <div>
-      <p className="mb-4 text-xs text-muted-foreground">5×5 Risk Matrix — Severity vs Likelihood assessment</p>
+      <p className="mb-4 text-xs text-muted-foreground">
+        5×5 Risk Matrix — Severity vs Likelihood {report ? '(positioned from AI risk assessment)' : '(positioned from incident severity; generate the RCFA report to refine likelihood)'}.
+      </p>
 
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-center text-xs">
@@ -43,7 +79,7 @@ export default function RiskAssessmentPanel({ investigation }: Props) {
                   const isActive = s === currentSeverity && lv === currentLikelihood;
                   return (
                     <td key={si} className="p-1">
-                      <div className={`rounded-md p-2.5 font-bold ${getCellColor(s, lv)} ${isActive ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : ''}`}>
+                      <div className={`rounded-md p-2.5 font-bold ${cellColor(s, lv)} ${isActive ? 'ring-2 ring-foreground ring-offset-2 ring-offset-background' : ''}`}>
                         {s * lv}
                       </div>
                     </td>
@@ -58,15 +94,24 @@ export default function RiskAssessmentPanel({ investigation }: Props) {
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Risk Score</p>
-          <p className="mt-1 text-3xl font-bold text-critical">{currentSeverity * currentLikelihood}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Severity: {currentSeverity} (Major) × Likelihood: {currentLikelihood} (Likely)</p>
+          <p className={`mt-1 text-3xl font-bold ${band.color}`}>{score}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Severity: {currentSeverity} ({severityLabels[currentSeverity - 1]}) × Likelihood: {currentLikelihood} ({likelihoodLabels[currentLikelihood - 1]})
+          </p>
         </div>
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Risk Level</p>
-          <p className="mt-1 text-lg font-bold text-critical">HIGH — Immediate Action Required</p>
-          <p className="mt-1 text-xs text-muted-foreground">Corrective actions must be implemented within 48 hours</p>
+          <p className={`mt-1 text-lg font-bold ${band.color}`}>{band.label}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{band.note}</p>
         </div>
       </div>
+
+      {report?.riskAssessment?.escalation && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-500">Escalation Potential</p>
+          <p className="mt-1 text-sm">{report.riskAssessment.escalation}</p>
+        </div>
+      )}
     </div>
   );
 }

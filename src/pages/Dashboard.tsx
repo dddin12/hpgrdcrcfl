@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, FileSearch, CheckCircle, Clock, TrendingUp, Plus, ArrowRight, Flame, Zap, FlaskConical } from 'lucide-react';
-import { mockInvestigations } from '@/data/mockData';
+import { listInvestigations } from '@/data/investigationStore';
 import { StatusBadge, SeverityBadge } from '@/components/StatusBadge';
 
 const incidentIcons: Record<string, typeof Flame> = {
@@ -14,9 +14,9 @@ const incidentIcons: Record<string, typeof Flame> = {
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } };
 
-function computeStats() {
+function computeStats(items: ReturnType<typeof listInvestigations>) {
   const counts = { open: 0, inProgress: 0, review: 0, closed: 0 };
-  mockInvestigations.forEach((inv) => {
+  items.forEach((inv) => {
     if (inv.status === 'open') counts.open++;
     else if (inv.status === 'in-progress') counts.inProgress++;
     else if (inv.status === 'review') counts.review++;
@@ -31,7 +31,8 @@ function computeStats() {
 }
 
 export default function Dashboard() {
-  const stats = computeStats();
+  const items = listInvestigations();
+  const stats = computeStats(items);
 
   return (
     <div className="space-y-6">
@@ -106,7 +107,7 @@ export default function Dashboard() {
               </Link>
             </div>
             <div className="divide-y divide-border">
-              {mockInvestigations.map((inv, i) => {
+              {items.slice(0, 6).map((inv, i) => {
                 const Icon = incidentIcons[inv.incidentType] || AlertTriangle;
                 return (
                   <motion.div
@@ -149,10 +150,10 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Risk Distribution</h3>
             <div className="mt-4 space-y-3">
               {(() => {
-                const total = mockInvestigations.length;
-                const critical = mockInvestigations.filter(i => i.severity === 'critical').length;
-                const high = mockInvestigations.filter(i => i.severity === 'high').length;
-                const medium = mockInvestigations.filter(i => i.severity === 'medium').length;
+                const total = items.length;
+                const critical = items.filter(i => i.severity === 'critical').length;
+                const high = items.filter(i => i.severity === 'high').length;
+                const medium = items.filter(i => i.severity === 'medium').length;
                 return [
                   { label: 'Critical', count: critical, total, color: 'bg-critical' },
                   { label: 'High', count: high, total, color: 'bg-warning' },
