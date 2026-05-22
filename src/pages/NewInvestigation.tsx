@@ -7,10 +7,12 @@ import { parseSopFiles } from '@/utils/parseSop';
 import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
 import { CLASSIFICATIONS } from '@/types/investigation';
 import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
+import { findInvalidRows } from '@/utils/validation';
 
 const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition";
 const labelClass = "block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1";
 const sectionTitle = "text-xs font-bold uppercase tracking-[0.2em] text-primary border-b border-border pb-2 mb-4";
+const helpClass = "mt-1 text-[10px] italic text-muted-foreground";
 
 function fmtSize(b: number) { return b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1)+' KB' : (b/1048576).toFixed(1)+' MB'; }
 
@@ -69,6 +71,18 @@ export default function NewInvestigation() {
       toast.error('Fill incident title, classification, location, date, and summary');
       return;
     }
+    const invalid = findInvalidRows({
+      chronology, facts,
+      recordsReviewed: records, personsInteracted: persons,
+    });
+    if (invalid.length) {
+      toast.error(
+        `Please fix ${invalid.length} invalid row(s): ` +
+        invalid.slice(0, 3).map(r => `${r.section} #${r.index} ("${r.text.slice(0, 20)}")`).join(', ') +
+        (invalid.length > 3 ? '…' : '')
+      );
+      return;
+    }
     const id = newInvestigationId();
     const t = toast.loading('Saving investigation...');
     let sopExcerpts: any[] = [];
@@ -120,7 +134,7 @@ export default function NewInvestigation() {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className={labelClass}>Incident Title *</label>
-              <input className={fieldClass} value={d.incidentTitle} onChange={e=>upd('incidentTitle', e.target.value)} required />
+              <input className={fieldClass} placeholder="Enter incident title" value={d.incidentTitle} onChange={e=>upd('incidentTitle', e.target.value)} required />
             </div>
             <div>
               <label className={labelClass}>Classification *</label>
@@ -131,7 +145,7 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Numbers</label>
-              <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="e.g. Not applicable / Process incident" />
+              <input className={fieldClass} value={d.numbers} onChange={e=>upd('numbers', e.target.value)} placeholder="Enter number or Not applicable" />
             </div>
             <div className="md:col-span-2 grid grid-cols-3 gap-3">
               <div>
@@ -149,27 +163,27 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Name of Injured Person</label>
-              <input className={fieldClass} value={d.injuredName} onChange={e=>upd('injuredName', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter name / designation" value={d.injuredName} onChange={e=>upd('injuredName', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Age / Sex of IP</label>
-              <input className={fieldClass} value={d.ageSex} onChange={e=>upd('ageSex', e.target.value)} />
+              <input className={fieldClass} placeholder="e.g. 32 / Male" value={d.ageSex} onChange={e=>upd('ageSex', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Ticket no. / Department</label>
-              <input className={fieldClass} value={d.ticketDept} onChange={e=>upd('ticketDept', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter ticket no. / department" value={d.ticketDept} onChange={e=>upd('ticketDept', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Company / Contractor</label>
-              <input className={fieldClass} value={d.companyContractor} onChange={e=>upd('companyContractor', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter company / contractor" value={d.companyContractor} onChange={e=>upd('companyContractor', e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Nature of Injury</label>
-              <input className={fieldClass} value={d.natureOfInjury} onChange={e=>upd('natureOfInjury', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter nature of injury / Not applicable" value={d.natureOfInjury} onChange={e=>upd('natureOfInjury', e.target.value)} />
             </div>
             <div className="md:col-span-2">
               <label className={labelClass}>Incident Reported by</label>
-              <input className={fieldClass} value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter name / designation" value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
             </div>
           </div>
         </motion.section>
@@ -180,27 +194,31 @@ export default function NewInvestigation() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className={labelClass}>Location of Incident *</label>
-              <input className={fieldClass} value={d.location} onChange={e=>upd('location', e.target.value)} required />
+              <input className={fieldClass} placeholder="Enter location" value={d.location} onChange={e=>upd('location', e.target.value)} required />
             </div>
             <div>
               <label className={labelClass}>Incident Number</label>
-              <input className={fieldClass} value={d.incidentNumber} onChange={e=>upd('incidentNumber', e.target.value)} />
+              <input className={fieldClass} placeholder="Enter incident number" value={d.incidentNumber} onChange={e=>upd('incidentNumber', e.target.value)} />
             </div>
             <div>
               <label className={labelClass}>Date of Incident *</label>
-              <input type="date" className={fieldClass} value={d.dateOfIncident} onChange={e=>upd('dateOfIncident', e.target.value)} required />
+              <input className={fieldClass} placeholder="dd-mm-yyyy" value={d.dateOfIncident} onChange={e=>upd('dateOfIncident', e.target.value)} required />
+              <p className={helpClass}>Format: dd-mm-yyyy</p>
             </div>
             <div>
               <label className={labelClass}>Time of Incident</label>
-              <input type="time" className={fieldClass} value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <input className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <p className={helpClass}>Format: hh:mm (24h)</p>
             </div>
             <div>
               <label className={labelClass}>Investigation Initiated (Date / Time)</label>
-              <input className={fieldClass} placeholder="e.g. 04 Sep 2020, 13:00" value={d.investigationInitiated} onChange={e=>upd('investigationInitiated', e.target.value)} />
+              <input className={fieldClass} placeholder="dd-mm-yyyy hh:mm" value={d.investigationInitiated} onChange={e=>upd('investigationInitiated', e.target.value)} />
+              <p className={helpClass}>Format: dd-mm-yyyy hh:mm</p>
             </div>
             <div>
               <label className={labelClass}>Report Submission Date</label>
-              <input type="date" className={fieldClass} value={d.reportSubmission} onChange={e=>upd('reportSubmission', e.target.value)} />
+              <input className={fieldClass} placeholder="dd-mm-yyyy" value={d.reportSubmission} onChange={e=>upd('reportSubmission', e.target.value)} />
+              <p className={helpClass}>Enter report submission date (dd-mm-yyyy)</p>
             </div>
           </div>
         </motion.section>
@@ -208,8 +226,8 @@ export default function NewInvestigation() {
         {/* SECTION C */}
         <motion.section variants={item} initial="hidden" animate="show" className="p-6 space-y-4">
           <div className={sectionTitle}>Section C — Investigation Information</div>
-          <RepeatableList label="List of Records Reviewed" items={records} onChange={setRecords} placeholder="e.g. Process SOP, Operating manual" />
-          <RepeatableList label="List of Persons Interacted" items={persons} onChange={setPersons} placeholder="e.g. Pradeep Pal Singh — PA" />
+          <RepeatableList label="List of Records Reviewed" help="Add one record per row" items={records} onChange={setRecords} placeholder="Enter reviewed document" />
+          <RepeatableList label="List of Persons Interacted" help="Add one person per row" items={persons} onChange={setPersons} placeholder="Enter interacted person" />
           <div className="grid gap-3 md:grid-cols-[auto_1fr] md:items-start">
             <label className="flex items-center gap-2 pt-1 text-sm">
               <input type="checkbox" checked={d.priorOccurred} onChange={e=>upd('priorOccurred', e.target.checked)} />
@@ -224,17 +242,19 @@ export default function NewInvestigation() {
           <div className={sectionTitle}>Section D — Incident Narrative</div>
           <div>
             <label className={labelClass}>Summary of Incident *</label>
-            <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="State facts only. Mark estimates/beliefs explicitly." />
+            <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="Enter factual summary of the incident" />
+            <p className={helpClass}>Use factual observations only. Mark estimates explicitly.</p>
           </div>
           <div>
             <label className={labelClass}>Chronology of Events</label>
+            <p className={helpClass + ' mb-2'}>Add one chronology event per row</p>
             <div className="space-y-2">
               {chronology.map((c, i) => (
                 <div key={i} className="flex gap-2">
-                  <input placeholder="Time" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
+                  <input placeholder="hh:mm" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], time: e.target.value}; setChronology(n);
                   }} />
-                  <input placeholder="Event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
+                  <input placeholder="Enter chronology event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], event: e.target.value}; setChronology(n);
                   }} />
                   <button type="button" onClick={() => setChronology(chronology.filter((_,j)=>j!==i))} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
@@ -243,7 +263,7 @@ export default function NewInvestigation() {
               <button type="button" onClick={() => setChronology([...chronology, {time:'', event:''}])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
             </div>
           </div>
-          <RepeatableList label="List of Facts collected during Investigation" items={facts} onChange={setFacts} placeholder="e.g. Maximum design flow rate = 1200 LPH" />
+          <RepeatableList label="List of Facts collected during Investigation" help="Use factual observations only" items={facts} onChange={setFacts} placeholder="Enter fact collected" />
         </motion.section>
 
         {/* SECTION E */}
@@ -303,10 +323,11 @@ export default function NewInvestigation() {
   );
 }
 
-function RepeatableList({ label, items, onChange, placeholder }: { label: string; items: string[]; onChange: (v: string[])=>void; placeholder?: string }) {
+function RepeatableList({ label, items, onChange, placeholder, help }: { label: string; items: string[]; onChange: (v: string[])=>void; placeholder?: string; help?: string }) {
   return (
     <div>
       <label className={labelClass}>{label}</label>
+      {help && <p className={helpClass + ' mb-2'}>{help}</p>}
       <div className="space-y-2">
         {items.map((v, i) => (
           <div key={i} className="flex gap-2">

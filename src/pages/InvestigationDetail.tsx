@@ -1,10 +1,11 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileDown, Sparkles, Loader2, RefreshCw, ChevronRight } from 'lucide-react';
-import { getInvestigation, computeInputHash, storeAiReport } from '@/data/investigationStore';
+import { FileDown, Sparkles, Loader2, RefreshCw, ChevronRight, Pencil } from 'lucide-react';
+import { getInvestigation, computeInputHash, storeAiReport, updateAiReport } from '@/data/investigationStore';
 import { generateInvestigationReport } from '@/utils/generateReport';
 import HpgrdcReportView from '@/components/analysis/HpgrdcReportView';
+import EditAiAnalysisDialog from '@/components/analysis/EditAiAnalysisDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { HpgrdcInvestigation, HpgrdcAiReport } from '@/types/investigation';
@@ -19,6 +20,7 @@ export default function InvestigationDetail() {
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [currentHash, setCurrentHash] = useState<string>('');
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     if (inv) computeInputHash(inv).then(setCurrentHash);
@@ -88,6 +90,11 @@ export default function InvestigationDetail() {
         </div>
         <div className="flex items-center gap-2">
           {inv.classification && <span className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{inv.classification}</span>}
+          {inv.aiReport && (
+            <button onClick={()=>setEditOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
+              <Pencil className="h-4 w-4"/> Edit AI Analysis
+            </button>
+          )}
           <button onClick={download} disabled={!inv.aiReport || downloading} className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50">
             {downloading ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4"/>}
             Download Report
@@ -156,6 +163,18 @@ export default function InvestigationDetail() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {inv.aiReport && (
+        <EditAiAnalysisDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          report={inv.aiReport}
+          onSave={(next) => {
+            const updated = updateAiReport(inv, next);
+            setInv(updated);
+          }}
+        />
+      )}
     </motion.div>
   );
 }

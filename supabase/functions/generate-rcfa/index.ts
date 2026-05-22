@@ -44,7 +44,14 @@ ${SYSTEMS.map((s, i) => `   ${i + 1}. ${s}`).join('\n')}
 
 4. recommendations — practical, low-complexity HPGRDC committee actions only.
    PREFER: SOP updates, checklist additions, retraining, supervision/counselling, poka-yoke (physical foolproofing), procedural controls, verification steps, visual indicators, periodic maintenance checks, simple mechanical safeguards.
-   STRICTLY AVOID unless severity is FATAL or LWC and clearly demands it: IoT, AI monitoring, digital twins, predictive analytics, advanced automation, expensive instrumentation, interlocks, smart sensors.
+   STRICTLY AVOID the following terms unless severity is FATAL or LWC AND the input narrative/facts already require it: "IoT", "AI monitoring", "digital twin", "predictive analytics", "advanced automation", "expensive instrumentation", "interlock", "smart sensor", "SCADA", "PLC upgrade". Do NOT mention any of these in WHY Tree, Key Factors, Deficiencies, or Recommendations otherwise.
+   PREFER concrete phrasings such as:
+     - "No safeguard available to protect Wet Gas Meter in case of back pressure."
+     - "SOP step missing for line venting before changeover."
+     - "Operator counselling on changeover procedure required."
+     - "Add visual indication on bypass line position."
+     - "Engineering control feasibility study for back-pressure protection."
+     - "Alternate analysis method to be evaluated for low-flow conditions."
    Each item: short recommendation, plausible responsibility (use a person/role only if it appears in the input; otherwise leave blank), targetDate (leave blank if not derivable), verifiedBy (leave blank if not derivable).
 
 Call emit_report once. Do not return prose.`;
