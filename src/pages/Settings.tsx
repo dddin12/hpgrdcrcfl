@@ -66,10 +66,10 @@ export default function Settings() {
         </div>
         <div className="space-y-4 p-5">
           {[
-            { key: 'includeRiskMatrix', label: 'Include Risk Matrix', desc: 'Add risk assessment matrix to generated reports' },
-            { key: 'includeFishbone', label: 'Include Fishbone Diagram', desc: 'Add fishbone analysis section to reports' },
-            { key: 'includeCauseTree', label: 'Include Cause Tree', desc: 'Add cause tree hierarchy to reports' },
-            { key: 'autoIncludeSOPs', label: 'Auto-reference SOPs', desc: 'Automatically include referenced SOP documents' },
+          { key: 'includeRiskMatrix', label: 'Include WHY Tree', desc: 'Show WHY Tree Analysis in the report' },
+            { key: 'includeFishbone', label: 'Include Key Factors', desc: 'Show Key Factors Identified section' },
+            { key: 'includeCauseTree', label: 'Include Systems to Reinforce', desc: 'Show the fixed 13-system table' },
+            { key: 'autoIncludeSOPs', label: 'Use uploaded SOPs for grounding', desc: 'Pass attached SOPs / manuals to AI as grounding context' },
           ].map((setting) => (
             <label key={setting.key} className="flex items-center justify-between cursor-pointer">
               <div>
@@ -99,8 +99,8 @@ export default function Settings() {
           <h2 className="text-sm font-semibold uppercase tracking-wider">About</h2>
         </div>
         <div className="space-y-1 text-sm text-muted-foreground">
-          <p>RCFA Investigation System v1.0</p>
-          <p>HP Green R&D Centre — Root Cause Failure Analysis</p>
+          <p>HPGRDC Investigation System v1.0</p>
+          <p>HP Green R&D Centre — Incident Investigation Reports</p>
         </div>
       </motion.div>
     </motion.div>
