@@ -28,13 +28,16 @@ function listBlock(items: string[] | undefined): string {
 
 export async function generateInvestigationReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport): Promise<void> {
   const CLASSES = ['FATAL','LWC','RWC','MTC','FAC','NM','PFE'] as const;
+  const isNA = inv.classification === 'NA' || !inv.classification;
+  const nmText = (inv.nm || '').trim() || (isNA ? 'Not Applicable' : '');
+  const pfeText = (inv.pfe || '').trim() || (isNA ? 'Not Applicable' : '');
   const classHeader = CLASSES.map(c =>
-    `<th class="cls ${inv.classification===c?'sel':''}">${c}</th>`).join('');
+    `<th class="cls ${!isNA && inv.classification===c?'sel':''}">${c}</th>`).join('');
   const classValueRow = CLASSES.map(c => {
     let val = '';
-    if (c === 'NM') val = inv.nm || '';
-    else if (c === 'PFE') val = inv.pfe || '';
-    const selCls = inv.classification === c ? 'sel' : '';
+    if (c === 'NM') val = nmText;
+    else if (c === 'PFE') val = pfeText;
+    const selCls = !isNA && inv.classification === c ? 'sel' : '';
     return `<td class="cls-sub ${selCls}">${esc(val)}</td>`;
   }).join('');
 
@@ -169,6 +172,7 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
   <tr>${classHeader}</tr>
   <tr>${classValueRow}</tr>
 </table>
+${isNA ? '<p style="font-size:9.5pt;font-style:italic;margin:-2px 0 6px 0;">Classification: Not Applicable</p>' : ''}
 
 <table>
   <tr><th style="width:30%">Name of Injured Person</th><td>${esc(inv.injuredName)}</td><th style="width:18%">Age / Sex of IP</th><td>${esc(inv.ageSex)}</td></tr>
@@ -224,6 +228,25 @@ ${kfBlock('PHYSICAL FACTORS', report.keyFactors.physical)}
 
 <h2>Supporting Photographs:</h2>
 ${(inv.photographs||[]).length ? `<div class="photos">${photoBlock}</div>` : `<div class="empty-photos"></div>`}
+
+${(() => {
+  if (!inv.includeSupportNotesInReport) return '';
+  const confirmedQs = (inv.aiQuestions || []).filter(q => (q.answer || '').trim() || (q.status && q.status !== 'not_checked'));
+  const acceptedChecks = (inv.aiMissingChecks || []).filter(m => m.status && m.status !== 'ignore');
+  const cats = inv.recommendationCategories || [];
+  if (!confirmedQs.length && !acceptedChecks.length && !cats.length) return '';
+  const qBlock = confirmedQs.length
+    ? `<ol>${confirmedQs.map(q => `<li><b>${esc(q.question)}</b><br/><span style="color:#444">${esc(q.answer || '('+(q.status||'')+')')}</span></li>`).join('')}</ol>` : '';
+  const mBlock = acceptedChecks.length
+    ? `<ul>${acceptedChecks.map(m => `<li>${esc(m.text)} — ${esc(m.status || '')}${m.response ? ': ' + esc(m.response) : ''}</li>`).join('')}</ul>` : '';
+  const cBlock = cats.length ? `<p>${cats.map(esc).join(' • ')}</p>` : '';
+  return `
+    <h2>Appendix — Investigation Support Notes</h2>
+    ${qBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Confirmed Investigation Answers</h3>${qBlock}` : ''}
+    ${mBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Missing-Evidence Checks</h3>${mBlock}` : ''}
+    ${cBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Recommendation Categories</h3>${cBlock}` : ''}
+  `;
+})()}
 
 </body></html>`;
 
