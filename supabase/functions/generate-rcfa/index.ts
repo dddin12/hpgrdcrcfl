@@ -24,6 +24,54 @@ const FORBIDDEN_TERMS = [
 
 const BLAME_REGEX = /\b(negligence|incompetence|carelessly|careless|misconduct|operator fault|at fault|operator['’]s fault)\b/gi;
 const CERTAINTY_REGEX = /\b(confirmed root cause|definitively|definitely caused|proves that|clearly caused|conclusively)\b/gi;
+const BANNED_VERBS = /\b(improve|improving|enhance|enhancing|optimize|optimizing|optimise|consider|considering|explore|exploring)\b/gi;
+
+const QUESTIONS_SYSTEM_PROMPT = `You are an HPGRDC Incident Investigation assistant in QUESTION mode. You DO NOT draw conclusions, you DO NOT propose causes, you DO NOT propose recommendations. Your only job is to help the investigator by:
+1. Producing 6–12 SPECIFIC investigation questions grounded in the user-entered facts, the attached SOP/manual excerpts, and photo names.
+2. Producing UP TO 5 "Missing checks" — short evidence the investigator should still verify.
+
+ABSOLUTE GROUNDING (highest priority):
+- Use ONLY what is present in user inputs, SOP/manual excerpts, or photo names. Never invent equipment, instruments, control systems, or procedures.
+- FORBIDDEN unless the exact term appears in inputs: SCADA, MFC, syringe pump, interlock, IoT, smart sensor, predictive analytics, predictive maintenance, automation, digital twin, AI monitoring, machine learning, sensor failure.
+- Never ask generic questions like "Was the SOP followed?" or "Were safety procedures observed?". Reference the SPECIFIC SOP step, manual limit, photo detail, or chronology fact.
+- Preferred form: "Which specific SOP step <X> requires verification, and is evidence available that it was completed?"
+- Each question must include:
+   - "why": one short line explaining why the question matters for this investigation.
+   - "evidenceSource": EXACTLY one of "User input", "SOP/manual", "Photo", "Missing evidence". Do not invent page numbers; mention a page only if the SOP excerpt explicitly carries one in its label.
+- Missing checks must be concrete physical/procedural items the investigator should still verify (e.g. "Verify last calibration date of the temperature gauge mentioned in fact #3"). Each <= 140 chars.
+- Do not suggest causes, fixes, or recommendations. Do not classify severity. Do not draw the WHY Tree.
+
+Call emit_questions exactly once.`;
+
+const QUESTIONS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    questions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          question: { type: 'string' },
+          why: { type: 'string' },
+          evidenceSource: { type: 'string' },
+        },
+        required: ['question', 'why', 'evidenceSource'],
+      },
+    },
+    missingChecks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { text: { type: 'string' } },
+        required: ['text'],
+      },
+    },
+  },
+  required: ['questions', 'missingChecks'],
+};
 
 const SYSTEM_PROMPT = `You are an experienced HPGRDC Incident Investigation Committee member analysing an R&D lab incident. Produce ONLY the four AI-generated sections of the HPGRDC Incident Investigation Report. Write in a concise, factual, engineering-investigation style — like a real HPGRDC committee, not a chatbot, consultant, or essayist.
 
@@ -165,8 +213,8 @@ Deno.serve(async (req: Request) => {
 
     const inv = body.investigation;
     const sopExcerpts = Array.isArray(body.sopExcerpts) ? body.sopExcerpts.slice(0, 3) : [];
-    const deepReview = !!body.deepReview;
-    const model = deepReview ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
+    const mode: 'questions' | 'final' = body.mode === 'final' ? 'final' : 'questions';
+    const photoNames: string[] = Array.isArray(inv.photographs) ? inv.photographs.map((p: any) => String(p?.name || '')) : [];
 
     // ---- Grounded vocabulary preprocessing ----
     const groundedSourceParts: string[] = [
@@ -180,6 +228,7 @@ Deno.serve(async (req: Request) => {
       const pages = Array.isArray(s?.pages) ? s.pages : [];
       for (const p of pages) groundedSourceParts.push(String(p?.text || ''));
     }
+    for (const n of photoNames) groundedSourceParts.push(n);
     const groundedSource = groundedSourceParts.join(' \n ').toLowerCase();
     const groundedTokens = new Set(
       groundedSource.split(/[^a-z0-9]+/).filter((t) => t.length >= 3),
@@ -190,6 +239,103 @@ Deno.serve(async (req: Request) => {
       return lower.split(/\s+/).every((tok) => groundedTokens.has(tok));
     };
 
+    // ============ QUESTIONS MODE ============
+    if (mode === 'questions') {
+      const qModel = 'google/gemini-3-flash-preview';
+      const qUserMsg = `INVESTIGATION INPUTS:
+${JSON.stringify({
+  incidentTitle: inv.incidentTitle, classification: inv.classification,
+  nm: inv.nm, pfe: inv.pfe, location: inv.location, labName: inv.labName,
+  dateOfIncident: inv.dateOfIncident, timeOfIncident: inv.timeOfIncident,
+  reportedBy: inv.reportedBy, recordsReviewed: inv.recordsReviewed,
+  personsInteracted: inv.personsInteracted, priorSimilar: inv.priorSimilar,
+  summary: inv.summary, chronology: inv.chronology, facts: inv.facts,
+  suspectedCause: inv.suspectedCause, correctiveActionTaken: inv.correctiveActionTaken,
+  photoNames,
+}, null, 2)}${formatSopBlock(sopExcerpts)}
+
+GROUNDED VOCABULARY (only these technical terms are allowed): ${Array.from(groundedTokens).slice(0, 400).join(', ')}
+
+Produce 6–12 grounded investigation questions and up to 5 missing checks. Call emit_questions once.`;
+
+      const qResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: qModel,
+          messages: [
+            { role: 'system', content: QUESTIONS_SYSTEM_PROMPT },
+            { role: 'user', content: qUserMsg },
+          ],
+          tools: [{ type: 'function', function: { name: 'emit_questions', description: 'Emit grounded investigation questions and missing checks.', parameters: QUESTIONS_SCHEMA } }],
+          tool_choice: { type: 'function', function: { name: 'emit_questions' } },
+        }),
+      });
+      if (qResp.status === 429) return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (qResp.status === 402) return new Response(JSON.stringify({ error: 'AI credits exhausted. Add credits in Settings > Workspace > Usage.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (!qResp.ok) {
+        const t = await qResp.text(); console.error('AI gateway error', qResp.status, t);
+        return new Response(JSON.stringify({ error: `AI gateway error (${qResp.status})` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const qData = await qResp.json();
+      const qArgs = qData?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      if (!qArgs) return new Response(JSON.stringify({ error: 'AI returned no questions' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      let parsed: any;
+      try { parsed = JSON.parse(qArgs); } catch { return new Response(JSON.stringify({ error: 'AI returned malformed JSON' }), { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }); }
+
+      const allowedSources = new Set(['User input', 'SOP/manual', 'Photo', 'Missing evidence']);
+      // Filter generic questions
+      const genericRe = /^(was|were)\s+(the\s+)?(sop|procedure|safety|protocol|standard|guideline)s?\s+(followed|observed|adhered)/i;
+
+      const cleanForbidden = (s: string): string | null => {
+        for (const term of FORBIDDEN_TERMS) {
+          const re = new RegExp(`\\b${term.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+          if (re.test(s) && !isGrounded(term)) return null;
+        }
+        return s;
+      };
+
+      const cleanedQ = (Array.isArray(parsed.questions) ? parsed.questions : [])
+        .map((q: any, i: number) => {
+          const text = String(q?.question || '').trim();
+          if (!text || genericRe.test(text)) return null;
+          const cleaned = cleanForbidden(text);
+          if (!cleaned) return null;
+          const src = String(q?.evidenceSource || '').trim();
+          const evidenceSource = allowedSources.has(src) ? src : 'Missing evidence';
+          return {
+            id: `q${Date.now().toString(36)}-${i}`,
+            question: cleaned,
+            why: String(q?.why || '').trim(),
+            evidenceSource,
+          };
+        })
+        .filter(Boolean)
+        .slice(0, 12);
+
+      const cleanedM = (Array.isArray(parsed.missingChecks) ? parsed.missingChecks : [])
+        .map((m: any, i: number) => {
+          const text = String(m?.text || '').trim();
+          if (!text) return null;
+          const cleaned = cleanForbidden(text);
+          if (!cleaned) return null;
+          return { id: `m${Date.now().toString(36)}-${i}`, text: cleaned.slice(0, 200) };
+        })
+        .filter(Boolean)
+        .slice(0, 5);
+
+      return new Response(JSON.stringify({ questions: cleanedQ, missingChecks: cleanedM }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ============ FINAL MODE ============
+    const deepReview = true;
+    const model = 'google/gemini-2.5-pro';
+    const answers = Array.isArray(body.answers) ? body.answers : [];
+    const missingResponses = Array.isArray(body.missingCheckResponses) ? body.missingCheckResponses : [];
+    const recommendationCategories: string[] = Array.isArray(body.recommendationCategories) ? body.recommendationCategories : [];
+
     const userMsg = `INVESTIGATION DATA (JSON):
 ${JSON.stringify({
   id: inv.id,
@@ -198,6 +344,7 @@ ${JSON.stringify({
   nm: inv.nm,
   pfe: inv.pfe,
   location: inv.location,
+  labName: inv.labName,
   dateOfIncident: inv.dateOfIncident,
   timeOfIncident: inv.timeOfIncident,
   numbers: inv.numbers,
@@ -214,7 +361,18 @@ ${JSON.stringify({
   summary: inv.summary,
   chronology: inv.chronology,
   facts: inv.facts,
+  suspectedCause: inv.suspectedCause,
+  correctiveActionTaken: inv.correctiveActionTaken,
 }, null, 2)}${formatSopBlock(sopExcerpts)}
+
+INVESTIGATOR-CONFIRMED ANSWERS (use as ground truth, do not contradict):
+${JSON.stringify(answers, null, 2)}
+
+INVESTIGATOR MISSING-CHECK RESPONSES:
+${JSON.stringify(missingResponses, null, 2)}
+
+APPLICABLE RECOMMENDATION CATEGORIES (restrict recommendations to these):
+${JSON.stringify(recommendationCategories)}
 
 GROUNDED VOCABULARY (only investigation-specific technical terms from these sources may be used; anything else must be replaced with "No evidence available during investigation."):
 ${Array.from(groundedTokens).slice(0, 400).join(', ')}
@@ -343,8 +501,11 @@ Call emit_report once with the four AI sections. Stay strictly grounded in the a
       };
       report.recommendations = report.recommendations
         .map((r: any) => {
-          const rec = cleanString(String(r?.recommendation || ''), { drop: true });
+          let rec = cleanString(String(r?.recommendation || ''), { drop: true });
           if (!rec) return null;
+          // Strip banned soft verbs
+          rec = rec.replace(BANNED_VERBS, '').replace(/\s{2,}/g, ' ').trim();
+          if (!rec || rec.length < 6) return null;
           return {
             recommendation: rec,
             responsibility: checkValueGrounded(r?.responsibility) ? (r?.responsibility || '') : '',
@@ -356,7 +517,7 @@ Call emit_report once with the four AI sections. Stay strictly grounded in the a
     }
     // ============ END POST-FILTER ============
 
-    report.model = deepReview ? 'pro' : 'flash';
+    report.model = 'pro';
 
     return new Response(JSON.stringify({ report }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
