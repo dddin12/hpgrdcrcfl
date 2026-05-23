@@ -40,9 +40,14 @@ export default function NewInvestigation() {
     numbers: '',
     nm: '',
     pfe: '',
+    nmNA: false,
+    pfeNA: false,
     company: 0, contractor: 0, visitors: 0,
     injuredName: '', ageSex: '', ticketDept: '', companyContractor: '',
     natureOfInjury: '', reportedBy: '',
+    labName: '',
+    suspectedCause: '',
+    correctiveActionTaken: '',
     location: '', incidentNumber: '',
     dateOfIncident: '', timeOfIncident: '',
     investigationInitiated: '', reportSubmission: '',
@@ -98,10 +103,14 @@ export default function NewInvestigation() {
     const inv: HpgrdcInvestigation = {
       id, createdAt: new Date().toISOString(),
       incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
-      nm: d.nm.trim(), pfe: d.pfe.trim(),
+      nm: d.nmNA ? 'Not Applicable' : d.nm.trim(),
+      pfe: d.pfeNA ? 'Not Applicable' : d.pfe.trim(),
       injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
       injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
       companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
+      labName: d.labName.trim(),
+      suspectedCause: d.suspectedCause.trim(),
+      correctiveActionTaken: d.correctiveActionTaken.trim(),
       location: d.location, incidentNumber: d.incidentNumber,
       dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
       investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
@@ -143,7 +152,7 @@ export default function NewInvestigation() {
               <label className={labelClass}>Classification *</label>
               <select className={fieldClass} value={d.classification} onChange={e=>upd('classification', e.target.value)} required>
                 <option value="">Select...</option>
-                {CLASSIFICATIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                {CLASSIFICATIONS.map(c => <option key={c} value={c}>{c === 'NA' ? 'Not Applicable' : c}</option>)}
               </select>
             </div>
             <div>
@@ -152,11 +161,17 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>NM (Near Miss)</label>
-              <input className={fieldClass} value={d.nm} onChange={e=>upd('nm', e.target.value)} placeholder="Not Applicable / Near Miss details" />
+              <div className="flex gap-2">
+                <input className={fieldClass + ' flex-1 disabled:opacity-50'} value={d.nmNA ? 'Not Applicable' : d.nm} disabled={d.nmNA} onChange={e=>upd('nm', e.target.value)} placeholder="Enter Near Miss details" />
+                <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" checked={d.nmNA} onChange={e=>upd('nmNA', e.target.checked)} /> N/A</label>
+              </div>
             </div>
             <div>
               <label className={labelClass}>PFE (Process / Property / Fire Event)</label>
-              <input className={fieldClass} value={d.pfe} onChange={e=>upd('pfe', e.target.value)} placeholder="Process incident / Property damage / Equipment damage" />
+              <div className="flex gap-2">
+                <input className={fieldClass + ' flex-1 disabled:opacity-50'} value={d.pfeNA ? 'Not Applicable' : d.pfe} disabled={d.pfeNA} onChange={e=>upd('pfe', e.target.value)} placeholder="Process incident / Property damage / Equipment damage" />
+                <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"><input type="checkbox" checked={d.pfeNA} onChange={e=>upd('pfeNA', e.target.checked)} /> N/A</label>
+              </div>
             </div>
             <div className="md:col-span-2 rounded-md border border-border/60 bg-muted/30 p-3">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Classification legend</p>
@@ -203,6 +218,10 @@ export default function NewInvestigation() {
             <div className="md:col-span-2">
               <label className={labelClass}>Incident Reported by</label>
               <input className={fieldClass} placeholder="Enter name / designation" value={d.reportedBy} onChange={e=>upd('reportedBy', e.target.value)} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelClass}>Lab Name</label>
+              <input className={fieldClass} placeholder="Enter lab name" value={d.labName} onChange={e=>upd('labName', e.target.value)} />
             </div>
           </div>
         </motion.section>
@@ -263,6 +282,16 @@ export default function NewInvestigation() {
             <label className={labelClass}>Summary of Incident *</label>
             <textarea className={fieldClass + ' min-h-[140px]'} required value={d.summary} onChange={e=>upd('summary', e.target.value)} placeholder="Enter factual summary of the incident" />
             <p className={helpClass}>Use factual observations only. Mark estimates explicitly.</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className={labelClass}>Suspected Cause (investigator view, optional)</label>
+              <textarea className={fieldClass + ' min-h-[80px]'} value={d.suspectedCause} onChange={e=>upd('suspectedCause', e.target.value)} placeholder="Enter suspected cause / Not Applicable" />
+            </div>
+            <div>
+              <label className={labelClass}>Corrective Action Taken (immediate)</label>
+              <textarea className={fieldClass + ' min-h-[80px]'} value={d.correctiveActionTaken} onChange={e=>upd('correctiveActionTaken', e.target.value)} placeholder="Enter immediate corrective action / Not Applicable" />
+            </div>
           </div>
           <div>
             <label className={labelClass}>Chronology of Events</label>
