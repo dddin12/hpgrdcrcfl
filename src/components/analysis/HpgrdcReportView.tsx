@@ -13,6 +13,13 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
   const chronList = (inv.chronology || [])
     .map(c => ({ time: (c.time || '').trim(), event: (c.event || '').trim() }))
     .filter(c => c.event || c.time);
+  const isNA = inv.classification === 'NA' || inv.classification === '';
+  const nmText = (inv.nm || '').trim() || (isNA ? 'Not Applicable' : '');
+  const pfeText = (inv.pfe || '').trim() || (isNA ? 'Not Applicable' : '');
+  const includeAppendix = !!inv.includeSupportNotesInReport;
+  const confirmedQs = (inv.aiQuestions || []).filter(q => (q.answer || '').trim() || (q.status && q.status !== 'not_checked'));
+  const acceptedChecks = (inv.aiMissingChecks || []).filter(m => m.status && m.status !== 'ignore');
+  const cats = inv.recommendationCategories || [];
   return (
     <div className="rounded-lg border border-border bg-background p-6 text-sm">
       <header className="mb-6 flex items-center justify-between gap-3 border-b border-border pb-4">
@@ -47,14 +54,14 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
         <tbody>
           <tr>
             {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => (
-              <th key={c} className={`border border-border p-2 text-center text-[11px] font-bold ${inv.classification===c?'bg-primary text-primary-foreground':'bg-muted/40'}`}>{c}</th>
+              <th key={c} className={`border border-border p-2 text-center text-[11px] font-bold ${!isNA && inv.classification===c?'bg-primary text-primary-foreground':'bg-muted/40'}`}>{c}</th>
             ))}
           </tr>
           <tr>
             {['FATAL','LWC','RWC','MTC','FAC','NM','PFE'].map(c => {
-              const val = c === 'NM' ? (inv.nm || '') : c === 'PFE' ? (inv.pfe || '') : '';
+              const val = c === 'NM' ? nmText : c === 'PFE' ? pfeText : '';
               return (
-                <td key={c} className={`border border-border p-1 text-center text-[10px] ${inv.classification===c?'bg-primary/20 text-primary':''}`} style={{wordBreak:'break-word'}}>
+                <td key={c} className={`border border-border p-1 text-center text-[10px] ${!isNA && inv.classification===c?'bg-primary/20 text-primary':''}`} style={{wordBreak:'break-word'}}>
                   {val}
                 </td>
               );
@@ -62,6 +69,7 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
           </tr>
         </tbody>
       </table>
+      {isNA && <p className="mt-1 text-[10px] italic text-muted-foreground">Classification: Not Applicable</p>}
 
       <H>Incident Information</H>
       <table className="w-full border-collapse text-xs">
@@ -198,6 +206,38 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
             </figure>
           ))}
         </div>
+      )}
+
+      {includeAppendix && (confirmedQs.length || acceptedChecks.length || cats.length) > 0 && (
+        <>
+          <H>Appendix — Investigation Support Notes</H>
+          {confirmedQs.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider">Confirmed Investigation Answers</p>
+              <ol className="list-decimal space-y-1 border border-border p-3 pl-8 text-xs">
+                {confirmedQs.map(q => (
+                  <li key={q.id}><b>{q.question}</b><br/><span className="text-muted-foreground">{q.answer || `(${q.status})`}</span></li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {acceptedChecks.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider">Missing-Evidence Checks</p>
+              <ul className="list-disc space-y-1 border border-border p-3 pl-8 text-xs">
+                {acceptedChecks.map(m => (
+                  <li key={m.id}>{m.text} <span className="text-muted-foreground">— {m.status}{m.response ? `: ${m.response}` : ''}</span></li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {cats.length > 0 && (
+            <div className="mb-3">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider">Recommendation Categories</p>
+              <p className="border border-border p-3 text-xs">{cats.join(' • ')}</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

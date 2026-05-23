@@ -1,4 +1,4 @@
-import type { HpgrdcInvestigation, HpgrdcAiReport } from '@/types/investigation';
+import type { HpgrdcInvestigation, HpgrdcAiReport, AiQuestion, AiMissingCheck } from '@/types/investigation';
 
 const KEY = 'hpgrdc.investigations.v2';
 
@@ -47,7 +47,7 @@ export function newInvestigationId(): string {
   return `HPGRDC-${year}-${rand}`;
 }
 
-/** Canonical JSON of user-entered fields + attachment names for cache hash. */
+/** Canonical JSON of user-entered fields + attachment names — shared by both hashes. */
 function canonicalInputs(inv: HpgrdcInvestigation): string {
   const photos = (inv.photographs || []).map(p => p.name).sort();
   const sops = (inv.sopExcerpts || []).map(s => s.name).sort();
@@ -57,6 +57,8 @@ function canonicalInputs(inv: HpgrdcInvestigation): string {
     injured: inv.injured, injuredName: inv.injuredName, ageSex: inv.ageSex,
     ticketDept: inv.ticketDept, companyContractor: inv.companyContractor,
     natureOfInjury: inv.natureOfInjury, reportedBy: inv.reportedBy,
+    labName: inv.labName || '', suspectedCause: inv.suspectedCause || '',
+    correctiveActionTaken: inv.correctiveActionTaken || '',
     location: inv.location, incidentNumber: inv.incidentNumber,
     dateOfIncident: inv.dateOfIncident, timeOfIncident: inv.timeOfIncident,
     investigationInitiated: inv.investigationInitiated, reportSubmission: inv.reportSubmission,
@@ -68,11 +70,23 @@ function canonicalInputs(inv: HpgrdcInvestigation): string {
   return JSON.stringify(o);
 }
 
-export async function computeInputHash(inv: HpgrdcInvestigation): Promise<string> {
-  const txt = canonicalInputs(inv);
+async function sha1(txt: string): Promise<string> {
   const enc = new TextEncoder().encode(txt);
   const buf = await crypto.subtle.digest('SHA-1', enc);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Stage 1+2 cache key — inputs + SOPs + photos only. */
+export async function computeQuestionsHash(inv: HpgrdcInvestigation): Promise<string> {
+  return sha1(canonicalInputs(inv));
+}
+
+/** Stage 4 cache key — inputs + answers + missing-check responses + categories. */
+export async function computeInputHash(inv: HpgrdcInvestigation): Promise<string> {
+  const answers = (inv.aiQuestions || []).map(q => ({ id: q.id, a: q.answer || '', s: q.status || '' }));
+  const checks = (inv.aiMissingChecks || []).map(m => ({ id: m.id, s: m.status || '', r: m.response || '' }));
+  const cats = [...(inv.recommendationCategories || [])].sort();
+  return sha1(canonicalInputs(inv) + '|' + JSON.stringify({ answers, checks, cats }));
 }
 
 export function storeAiReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport): HpgrdcInvestigation {
@@ -82,6 +96,30 @@ export function storeAiReport(inv: HpgrdcInvestigation, report: HpgrdcAiReport):
     ...inv, aiReport: report, aiInputHash: report.inputHash,
     aiHistory: history.slice(0, 10),
   };
+  saveInvestigation(next);
+  return next;
+}
+
+export function storeAiQuestions(
+  inv: HpgrdcInvestigation,
+  questions: AiQuestion[],
+  missingChecks: AiMissingCheck[],
+  hash: string,
+): HpgrdcInvestigation {
+  // Preserve previous answers/statuses where IDs match
+  const prevQ = new Map((inv.aiQuestions || []).map(q => [q.id, q]));
+  const prevM = new Map((inv.aiMissingChecks || []).map(m => [m.id, m]));
+  const mergedQ = questions.map(q => ({ ...q, answer: prevQ.get(q.id)?.answer, status: prevQ.get(q.id)?.status }));
+  const mergedM = missingChecks.map(m => ({ ...m, status: prevM.get(m.id)?.status, response: prevM.get(m.id)?.response }));
+  const next: HpgrdcInvestigation = {
+    ...inv, aiQuestions: mergedQ, aiMissingChecks: mergedM, questionsInputHash: hash,
+  };
+  saveInvestigation(next);
+  return next;
+}
+
+export function patchInvestigation(inv: HpgrdcInvestigation, patch: Partial<HpgrdcInvestigation>): HpgrdcInvestigation {
+  const next = { ...inv, ...patch };
   saveInvestigation(next);
   return next;
 }

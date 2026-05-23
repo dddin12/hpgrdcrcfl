@@ -51,35 +51,33 @@ export default function Dashboard() {
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 font-medium">ID</th>
                   <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Lab Name</th>
                   <th className="px-4 py-3 font-medium">Incident Title</th>
                   <th className="px-4 py-3 font-medium">Location</th>
                   <th className="px-4 py-3 font-medium">Classification</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Reported By</th>
                   <th className="px-4 py-3 font-medium text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {items.map(inv => (
                   <tr key={inv.id} className="transition-colors hover:bg-muted/30">
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{inv.id}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{inv.dateOfIncident || '—'}</td>
+                    <td className="px-4 py-3 text-xs">{inv.labName || '—'}</td>
                     <td className="px-4 py-3 font-medium">{inv.incidentTitle}</td>
                     <td className="px-4 py-3 text-muted-foreground">{inv.location}</td>
                     <td className="px-4 py-3">
                       {inv.classification && (
-                        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">{inv.classification}</span>
+                        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          {inv.classification === 'NA' ? 'N/A' : inv.classification}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs">
-                      {inv.aiReport
-                        ? <span className="rounded bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-500">Generated</span>
-                        : <span className="rounded bg-muted px-2 py-0.5 font-semibold text-muted-foreground">Draft</span>}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{inv.reportedBy || '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <Link to={`/investigation/${inv.id}`} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10">
-                        View Report <ArrowRight className="h-3 w-3" />
+                        {inv.aiReport ? 'Open' : 'Edit Draft'} <ArrowRight className="h-3 w-3" />
                       </Link>
                     </td>
                   </tr>

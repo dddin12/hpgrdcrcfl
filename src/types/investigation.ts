@@ -1,8 +1,18 @@
-export type Classification = 'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC';
+export type Classification = 'NA' | 'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC';
 
-export const CLASSIFICATIONS: Classification[] = ['FATAL', 'LWC', 'RWC', 'MTC', 'FAC'];
+export const CLASSIFICATIONS: Classification[] = ['NA', 'FATAL', 'LWC', 'RWC', 'MTC', 'FAC'];
+
+export const CLASSIFICATION_LABELS: Record<Classification, string> = {
+  NA: 'Not Applicable',
+  FATAL: 'FATAL',
+  LWC: 'LWC',
+  RWC: 'RWC',
+  MTC: 'MTC',
+  FAC: 'FAC',
+};
 
 export const CLASSIFICATION_LEGEND: { code: string; meaning: string }[] = [
+  { code: 'NA', meaning: 'Not Applicable' },
   { code: 'FATAL', meaning: 'Fatality' },
   { code: 'LWC', meaning: 'Lost Workday Case' },
   { code: 'RWC', meaning: 'Restricted Work Case' },
@@ -11,6 +21,37 @@ export const CLASSIFICATION_LEGEND: { code: string; meaning: string }[] = [
   { code: 'NM', meaning: 'Near Miss' },
   { code: 'PFE', meaning: 'Process / Property / Fire Event' },
 ];
+
+export const RECOMMENDATION_CATEGORIES: string[] = [
+  'SOP revision',
+  'Checklist update',
+  'Operator briefing / training',
+  'Equipment inspection',
+  'Visual label / marking',
+  'Verification record',
+  'Maintenance check',
+  'Engineering safeguard review',
+  'Manual limit display',
+  'Housekeeping',
+  'Spill / leak control',
+  'Emergency stop awareness',
+];
+
+export interface AiQuestion {
+  id: string;
+  question: string;
+  why: string;
+  evidenceSource: 'User input' | 'SOP/manual' | 'Photo' | 'Missing evidence' | string;
+  answer?: string;
+  status?: 'answered' | 'na' | 'not_checked' | 'not_available';
+}
+
+export interface AiMissingCheck {
+  id: string;
+  text: string;
+  status?: 'accept' | 'ignore' | 'na';
+  response?: string;
+}
 
 export interface SopExcerpt {
   name: string;
@@ -41,6 +82,11 @@ export interface HpgrdcInvestigation {
   natureOfInjury: string;
   reportedBy: string;
 
+  // Lab / context
+  labName?: string;
+  suspectedCause?: string;
+  correctiveActionTaken?: string;
+
   // Section B — Incident Information
   location: string;
   incidentNumber: string;
@@ -67,6 +113,13 @@ export interface HpgrdcInvestigation {
   aiReport?: HpgrdcAiReport;
   aiInputHash?: string;
   aiHistory?: HpgrdcAiReport[];
+
+  // AI-assisted workflow
+  aiQuestions?: AiQuestion[];
+  aiMissingChecks?: AiMissingCheck[];
+  questionsInputHash?: string;
+  recommendationCategories?: string[];
+  includeSupportNotesInReport?: boolean;
 
   // For dashboard convenience
   preparedBy?: string;
