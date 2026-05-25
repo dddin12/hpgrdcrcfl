@@ -1,12 +1,12 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseSopFiles } from '@/utils/parseSop';
-import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
+import { saveInvestigation, newInvestigationId, getInvestigation } from '@/data/investigationStore';
 import { CLASSIFICATIONS, CLASSIFICATION_LEGEND } from '@/types/investigation';
-import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
+import type { HpgrdcInvestigation, Classification, Photograph, SopExcerpt } from '@/types/investigation';
 import { findInvalidRows } from '@/utils/validation';
 import type { InvalidRow } from '@/utils/validation';
 
@@ -30,37 +30,58 @@ const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
 
 export default function NewInvestigation() {
   const navigate = useNavigate();
+  const { editId } = useParams();
+  const existing = editId ? getInvestigation(editId) : undefined;
+  const isEdit = !!existing;
   const docRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [existingSops, setExistingSops] = useState<SopExcerpt[]>(existing?.sopExcerpts || []);
+  const [existingPhotos, setExistingPhotos] = useState<Photograph[]>(existing?.photographs || []);
 
   const [d, setD] = useState({
-    incidentTitle: '',
-    classification: '' as Classification | '',
-    numbers: '',
-    nm: '',
-    pfe: '',
-    nmNA: false,
-    pfeNA: false,
-    company: 0, contractor: 0, visitors: 0,
-    injuredName: '', ageSex: '', ticketDept: '', companyContractor: '',
-    natureOfInjury: '', reportedBy: '',
-    labName: '',
-    suspectedCause: '',
-    correctiveActionTaken: '',
-    location: '', incidentNumber: '',
-    dateOfIncident: '', timeOfIncident: '',
-    investigationInitiated: '', reportSubmission: '',
-    priorOccurred: false, priorNotes: '',
-    summary: '',
+    incidentTitle: existing?.incidentTitle || '',
+    classification: (existing?.classification || '') as Classification | '',
+    numbers: existing?.numbers || '',
+    nm: existing?.nm && existing.nm !== 'Not Applicable' ? existing.nm : '',
+    pfe: existing?.pfe && existing.pfe !== 'Not Applicable' ? existing.pfe : '',
+    nmNA: existing?.nm === 'Not Applicable',
+    pfeNA: existing?.pfe === 'Not Applicable',
+    company: existing?.injured?.company || 0,
+    contractor: existing?.injured?.contractor || 0,
+    visitors: existing?.injured?.visitors || 0,
+    injuredName: existing?.injuredName || '',
+    ageSex: existing?.ageSex || '',
+    ticketDept: existing?.ticketDept || '',
+    companyContractor: existing?.companyContractor || '',
+    natureOfInjury: existing?.natureOfInjury || '',
+    reportedBy: existing?.reportedBy || '',
+    labName: existing?.labName || '',
+    suspectedCause: existing?.suspectedCause || '',
+    correctiveActionTaken: existing?.correctiveActionTaken || '',
+    location: existing?.location || '',
+    incidentNumber: existing?.incidentNumber || '',
+    dateOfIncident: existing?.dateOfIncident || '',
+    timeOfIncident: existing?.timeOfIncident || '',
+    investigationInitiated: existing?.investigationInitiated || '',
+    reportSubmission: existing?.reportSubmission || '',
+    priorOccurred: existing?.priorSimilar?.occurred || false,
+    priorNotes: existing?.priorSimilar?.notes || '',
+    summary: existing?.summary || '',
   });
 
-  const [records, setRecords] = useState<string[]>(['']);
-  const [persons, setPersons] = useState<string[]>(['']);
-  const [chronology, setChronology] = useState<{time: string; event: string}[]>([{time:'', event:''}]);
-  const [facts, setFacts] = useState<string[]>(['']);
-  const [acceptedRows, setAcceptedRows] = useState<Record<string, true>>({});
+  const [records, setRecords] = useState<string[]>(existing?.recordsReviewed?.length ? existing.recordsReviewed : ['']);
+  const [persons, setPersons] = useState<string[]>(existing?.personsInteracted?.length ? existing.personsInteracted : ['']);
+  const [chronology, setChronology] = useState<{date: string; time: string; event: string}[]>(
+    existing?.chronology?.length
+      ? existing.chronology.map(c => ({ date: c.date || '', time: c.time || '', event: c.event || '' }))
+      : [{date:'', time:'', event:''}]
+  );
+  const [facts, setFacts] = useState<string[]>(existing?.facts?.length ? existing.facts : ['']);
+  const [acceptedRows, setAcceptedRows] = useState<Record<string, true>>(
+    Object.fromEntries((existing?.acceptedInvalidRows || []).map(k => [k, true as const]))
+  );
   const [invalidPanel, setInvalidPanel] = useState<InvalidRow[]>([]);
 
   const upd = (k: keyof typeof d, v: any) => setD(p => ({...p, [k]: v}));
@@ -73,6 +94,59 @@ export default function NewInvestigation() {
     const arr = Array.from(files).filter(f => f.type.startsWith('image/') && f.size <= 5*1024*1024);
     if (arr.length < Array.from(files).length) toast.error('Some photos skipped (must be images, max 5 MB each)');
     setPhotos(p => [...p, ...arr]);
+  };
+
+  const buildInvestigation = async (): Promise<HpgrdcInvestigation> => {
+    let sopExcerpts: SopExcerpt[] = [...existingSops];
+    let photographs: Photograph[] = [...existingPhotos];
+    try {
+      if (docs.length) sopExcerpts = [...sopExcerpts, ...(await parseSopFiles(docs))];
+      if (photos.length) photographs = [...photographs, ...(await Promise.all(photos.map(readImage)))];
+    } catch (e) { console.warn(e); }
+    const id = isEdit ? existing!.id : newInvestigationId();
+    const base: HpgrdcInvestigation = {
+      id, createdAt: existing?.createdAt || new Date().toISOString(),
+      incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
+      nm: d.nmNA ? 'Not Applicable' : d.nm.trim(),
+      pfe: d.pfeNA ? 'Not Applicable' : d.pfe.trim(),
+      injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
+      injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
+      companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
+      labName: d.labName.trim(),
+      suspectedCause: d.suspectedCause.trim(),
+      correctiveActionTaken: d.correctiveActionTaken.trim(),
+      location: d.location, incidentNumber: d.incidentNumber,
+      dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
+      investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
+      recordsReviewed: records.map(r => r.trim()).filter(Boolean),
+      personsInteracted: persons.map(r => r.trim()).filter(Boolean),
+      priorSimilar: { occurred: d.priorOccurred, notes: d.priorNotes },
+      summary: d.summary,
+      chronology: chronology
+        .map(c => ({ date: c.date.trim(), time: c.time.trim(), event: c.event.trim() }))
+        .filter(c => c.event),
+      facts: facts.map(f => f.trim()).filter(Boolean),
+      sopExcerpts, photographs,
+      acceptedInvalidRows: Object.keys(acceptedRows),
+    };
+    if (isEdit && existing) {
+      // Preserve all AI-stage state
+      return {
+        ...base,
+        aiQuestions: existing.aiQuestions,
+        aiMissingChecks: existing.aiMissingChecks,
+        questionsInputHash: existing.questionsInputHash,
+        recommendationCategories: existing.recommendationCategories,
+        aiReport: existing.aiReport,
+        aiInputHash: existing.aiInputHash,
+        aiHistory: existing.aiHistory,
+        includeSupportNotesInReport: existing.includeSupportNotesInReport,
+        includePendingGapsInReport: existing.includePendingGapsInReport,
+        preparedBy: existing.preparedBy,
+        approvedBy: existing.approvedBy,
+      };
+    }
+    return base;
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -93,42 +167,22 @@ export default function NewInvestigation() {
       );
       return;
     }
-    const id = newInvestigationId();
-    const t = toast.loading('Saving investigation...');
-    let sopExcerpts: any[] = [];
-    let photographs: Photograph[] = [];
-    try {
-      if (docs.length) sopExcerpts = await parseSopFiles(docs);
-      if (photos.length) photographs = await Promise.all(photos.map(readImage));
-    } catch (e) {
-      console.warn(e);
-    }
-    const inv: HpgrdcInvestigation = {
-      id, createdAt: new Date().toISOString(),
-      incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
-      nm: d.nmNA ? 'Not Applicable' : d.nm.trim(),
-      pfe: d.pfeNA ? 'Not Applicable' : d.pfe.trim(),
-      injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
-      injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
-      companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
-      labName: d.labName.trim(),
-      suspectedCause: d.suspectedCause.trim(),
-      correctiveActionTaken: d.correctiveActionTaken.trim(),
-      location: d.location, incidentNumber: d.incidentNumber,
-      dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
-      investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
-      recordsReviewed: records.map(r => r.trim()).filter(Boolean),
-      personsInteracted: persons.map(r => r.trim()).filter(Boolean),
-      priorSimilar: { occurred: d.priorOccurred, notes: d.priorNotes },
-      summary: d.summary,
-      chronology: chronology.filter(c => c.event.trim()),
-      facts: facts.map(f => f.trim()).filter(Boolean),
-      sopExcerpts, photographs,
-      acceptedInvalidRows: Object.keys(acceptedRows),
-    };
+    const t = toast.loading(isEdit ? 'Updating investigation...' : 'Saving investigation...');
+    const inv = await buildInvestigation();
     saveInvestigation(inv);
-    toast.success('Investigation saved', { id: t });
-    navigate(`/investigation/${id}`);
+    toast.success(isEdit ? 'Investigation updated' : 'Investigation saved', { id: t });
+    navigate(`/investigation/${inv.id}`);
+  };
+
+  const saveDraft = async () => {
+    const t = toast.loading('Saving draft...');
+    try {
+      const inv = await buildInvestigation();
+      saveInvestigation(inv);
+      toast.success('Draft saved', { id: t });
+    } catch {
+      toast.error('Failed to save draft', { id: t });
+    }
   };
 
   return (
