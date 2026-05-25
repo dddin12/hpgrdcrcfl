@@ -55,10 +55,10 @@ export async function generateInvestigationReport(inv: HpgrdcInvestigation, repo
     || `<tr><td colspan="5" style="text-align:center;color:#666;">No recommendations.</td></tr>`;
 
   const chronList = (inv.chronology || [])
-    .map(c => ({ time: (c.time || '').trim(), event: (c.event || '').trim() }))
-    .filter(c => c.event || c.time);
+    .map(c => ({ date: (c.date || '').trim(), time: (c.time || '').trim(), event: (c.event || '').trim() }))
+    .filter(c => c.event || c.time || c.date);
   const chronologyRows = chronList.length
-    ? `<ol class="chron">${chronList.map(c => `<li>${esc(formatChronologyLine(c.time, c.event))}</li>`).join('')}</ol>`
+    ? `<ol class="chron">${chronList.map(c => `<li>${esc(formatChronologyLine(c.date, c.time, c.event))}</li>`).join('')}</ol>`
     : '<p style="color:#666;">—</p>';
 
   const factRows = inv.facts.length
@@ -245,6 +245,16 @@ ${(() => {
     ${qBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Confirmed Investigation Answers</h3>${qBlock}` : ''}
     ${mBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Missing-Evidence Checks</h3>${mBlock}` : ''}
     ${cBlock ? `<h3 style="font-size:10.5pt;margin:8px 0 4px;">Recommendation Categories</h3>${cBlock}` : ''}
+  `;
+})()}
+
+${(() => {
+  if (!inv.includePendingGapsInReport) return '';
+  const pending = (inv.aiQuestions || []).filter(q => !(q.status === 'answered' && (q.answer || '').trim()));
+  if (!pending.length) return '';
+  return `
+    <h2>Appendix — Pending Investigation Gaps</h2>
+    <ul>${pending.map(q => `<li>${esc(q.question)} <span style="color:#666">— ${esc(q.status || 'not checked')}</span></li>`).join('')}</ul>
   `;
 })()}
 
