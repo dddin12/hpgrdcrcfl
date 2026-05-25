@@ -8,6 +8,7 @@ import { saveInvestigation, newInvestigationId } from '@/data/investigationStore
 import { CLASSIFICATIONS, CLASSIFICATION_LEGEND } from '@/types/investigation';
 import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
 import { findInvalidRows } from '@/utils/validation';
+import type { InvalidRow } from '@/utils/validation';
 
 const fieldClass = "w-full rounded-md border border-border bg-muted px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition";
 const labelClass = "block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1";
@@ -59,6 +60,8 @@ export default function NewInvestigation() {
   const [persons, setPersons] = useState<string[]>(['']);
   const [chronology, setChronology] = useState<{time: string; event: string}[]>([{time:'', event:''}]);
   const [facts, setFacts] = useState<string[]>(['']);
+  const [acceptedRows, setAcceptedRows] = useState<Record<string, true>>({});
+  const [invalidPanel, setInvalidPanel] = useState<InvalidRow[]>([]);
 
   const upd = (k: keyof typeof d, v: any) => setD(p => ({...p, [k]: v}));
 
@@ -78,15 +81,15 @@ export default function NewInvestigation() {
       toast.error('Fill incident title, classification, location, date, and summary');
       return;
     }
-    const invalid = findInvalidRows({
+    const allInvalid = findInvalidRows({
       chronology, facts,
       recordsReviewed: records, personsInteracted: persons,
     });
+    const invalid = allInvalid.filter(r => !acceptedRows[r.key]);
+    setInvalidPanel(invalid);
     if (invalid.length) {
       toast.error(
-        `Please fix ${invalid.length} invalid row(s): ` +
-        invalid.slice(0, 3).map(r => `${r.section} #${r.index} ("${r.text.slice(0, 20)}")`).join(', ') +
-        (invalid.length > 3 ? '…' : '')
+        `${invalid.length} row(s) flagged. Fix them or mark "Accept as valid technical input".`
       );
       return;
     }
@@ -121,6 +124,7 @@ export default function NewInvestigation() {
       chronology: chronology.filter(c => c.event.trim()),
       facts: facts.map(f => f.trim()).filter(Boolean),
       sopExcerpts, photographs,
+      acceptedInvalidRows: Object.keys(acceptedRows),
     };
     saveInvestigation(inv);
     toast.success('Investigation saved', { id: t });
