@@ -364,6 +364,40 @@ export default function NewInvestigation() {
           </div>
         </motion.section>
 
+        {invalidPanel.length > 0 && (
+          <div className="m-6 rounded-md border border-destructive/50 bg-destructive/5 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-destructive mb-2">
+              {invalidPanel.length} flagged row(s)
+            </p>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Fix the text below, or tick "Accept as valid technical input" if it is a real engineering fact.
+            </p>
+            <ul className="space-y-2">
+              {invalidPanel.map(r => (
+                <li key={r.key} className="rounded border border-border bg-background/60 p-2 text-xs">
+                  <div className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-semibold text-foreground">{r.section} #{r.index}</span>
+                    <span className="text-muted-foreground italic">— {r.reason}</span>
+                  </div>
+                  <div className="mt-1 text-foreground">{r.text}</div>
+                  <label className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary">
+                    <input
+                      type="checkbox"
+                      checked={!!acceptedRows[r.key]}
+                      onChange={e => setAcceptedRows(p => {
+                        const n = { ...p };
+                        if (e.target.checked) n[r.key] = true; else delete n[r.key];
+                        return n;
+                      })}
+                    />
+                    Accept as valid technical input
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-3 p-6">
           <button type="button" onClick={()=>navigate('/')} className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
