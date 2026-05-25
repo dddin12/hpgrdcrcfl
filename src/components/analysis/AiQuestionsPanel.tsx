@@ -36,6 +36,7 @@ export default function AiQuestionsPanel({
               <div className="flex-1">
                 <p className="font-semibold text-foreground">{i + 1}. {q.question}</p>
                 {q.why && <p className="mt-1 text-[11px] text-muted-foreground"><span className="font-semibold uppercase tracking-wider">Why:</span> {q.why}</p>}
+                {q.sopRef && <p className="mt-1 text-[11px] text-emerald-400/90"><span className="font-semibold uppercase tracking-wider">Ref:</span> {q.sopRef}</p>}
               </div>
               <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-semibold ${badgeCls}`}>{q.evidenceSource}</span>
             </div>
