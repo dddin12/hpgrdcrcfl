@@ -1,12 +1,12 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Upload, ArrowRight, X, FileText, Image as ImageIcon, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { parseSopFiles } from '@/utils/parseSop';
-import { saveInvestigation, newInvestigationId } from '@/data/investigationStore';
+import { saveInvestigation, newInvestigationId, getInvestigation } from '@/data/investigationStore';
 import { CLASSIFICATIONS, CLASSIFICATION_LEGEND } from '@/types/investigation';
-import type { HpgrdcInvestigation, Classification, Photograph } from '@/types/investigation';
+import type { HpgrdcInvestigation, Classification, Photograph, SopExcerpt } from '@/types/investigation';
 import { findInvalidRows } from '@/utils/validation';
 import type { InvalidRow } from '@/utils/validation';
 
@@ -30,37 +30,58 @@ const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
 
 export default function NewInvestigation() {
   const navigate = useNavigate();
+  const { editId } = useParams();
+  const existing = editId ? getInvestigation(editId) : undefined;
+  const isEdit = !!existing;
   const docRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<File[]>([]);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [existingSops, setExistingSops] = useState<SopExcerpt[]>(existing?.sopExcerpts || []);
+  const [existingPhotos, setExistingPhotos] = useState<Photograph[]>(existing?.photographs || []);
 
   const [d, setD] = useState({
-    incidentTitle: '',
-    classification: '' as Classification | '',
-    numbers: '',
-    nm: '',
-    pfe: '',
-    nmNA: false,
-    pfeNA: false,
-    company: 0, contractor: 0, visitors: 0,
-    injuredName: '', ageSex: '', ticketDept: '', companyContractor: '',
-    natureOfInjury: '', reportedBy: '',
-    labName: '',
-    suspectedCause: '',
-    correctiveActionTaken: '',
-    location: '', incidentNumber: '',
-    dateOfIncident: '', timeOfIncident: '',
-    investigationInitiated: '', reportSubmission: '',
-    priorOccurred: false, priorNotes: '',
-    summary: '',
+    incidentTitle: existing?.incidentTitle || '',
+    classification: (existing?.classification || '') as Classification | '',
+    numbers: existing?.numbers || '',
+    nm: existing?.nm && existing.nm !== 'Not Applicable' ? existing.nm : '',
+    pfe: existing?.pfe && existing.pfe !== 'Not Applicable' ? existing.pfe : '',
+    nmNA: existing?.nm === 'Not Applicable',
+    pfeNA: existing?.pfe === 'Not Applicable',
+    company: existing?.injured?.company || 0,
+    contractor: existing?.injured?.contractor || 0,
+    visitors: existing?.injured?.visitors || 0,
+    injuredName: existing?.injuredName || '',
+    ageSex: existing?.ageSex || '',
+    ticketDept: existing?.ticketDept || '',
+    companyContractor: existing?.companyContractor || '',
+    natureOfInjury: existing?.natureOfInjury || '',
+    reportedBy: existing?.reportedBy || '',
+    labName: existing?.labName || '',
+    suspectedCause: existing?.suspectedCause || '',
+    correctiveActionTaken: existing?.correctiveActionTaken || '',
+    location: existing?.location || '',
+    incidentNumber: existing?.incidentNumber || '',
+    dateOfIncident: existing?.dateOfIncident || '',
+    timeOfIncident: existing?.timeOfIncident || '',
+    investigationInitiated: existing?.investigationInitiated || '',
+    reportSubmission: existing?.reportSubmission || '',
+    priorOccurred: existing?.priorSimilar?.occurred || false,
+    priorNotes: existing?.priorSimilar?.notes || '',
+    summary: existing?.summary || '',
   });
 
-  const [records, setRecords] = useState<string[]>(['']);
-  const [persons, setPersons] = useState<string[]>(['']);
-  const [chronology, setChronology] = useState<{time: string; event: string}[]>([{time:'', event:''}]);
-  const [facts, setFacts] = useState<string[]>(['']);
-  const [acceptedRows, setAcceptedRows] = useState<Record<string, true>>({});
+  const [records, setRecords] = useState<string[]>(existing?.recordsReviewed?.length ? existing.recordsReviewed : ['']);
+  const [persons, setPersons] = useState<string[]>(existing?.personsInteracted?.length ? existing.personsInteracted : ['']);
+  const [chronology, setChronology] = useState<{date: string; time: string; event: string}[]>(
+    existing?.chronology?.length
+      ? existing.chronology.map(c => ({ date: c.date || '', time: c.time || '', event: c.event || '' }))
+      : [{date:'', time:'', event:''}]
+  );
+  const [facts, setFacts] = useState<string[]>(existing?.facts?.length ? existing.facts : ['']);
+  const [acceptedRows, setAcceptedRows] = useState<Record<string, true>>(
+    Object.fromEntries((existing?.acceptedInvalidRows || []).map(k => [k, true as const]))
+  );
   const [invalidPanel, setInvalidPanel] = useState<InvalidRow[]>([]);
 
   const upd = (k: keyof typeof d, v: any) => setD(p => ({...p, [k]: v}));
@@ -73,6 +94,59 @@ export default function NewInvestigation() {
     const arr = Array.from(files).filter(f => f.type.startsWith('image/') && f.size <= 5*1024*1024);
     if (arr.length < Array.from(files).length) toast.error('Some photos skipped (must be images, max 5 MB each)');
     setPhotos(p => [...p, ...arr]);
+  };
+
+  const buildInvestigation = async (): Promise<HpgrdcInvestigation> => {
+    let sopExcerpts: SopExcerpt[] = [...existingSops];
+    let photographs: Photograph[] = [...existingPhotos];
+    try {
+      if (docs.length) sopExcerpts = [...sopExcerpts, ...(await parseSopFiles(docs))];
+      if (photos.length) photographs = [...photographs, ...(await Promise.all(photos.map(readImage)))];
+    } catch (e) { console.warn(e); }
+    const id = isEdit ? existing!.id : newInvestigationId();
+    const base: HpgrdcInvestigation = {
+      id, createdAt: existing?.createdAt || new Date().toISOString(),
+      incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
+      nm: d.nmNA ? 'Not Applicable' : d.nm.trim(),
+      pfe: d.pfeNA ? 'Not Applicable' : d.pfe.trim(),
+      injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
+      injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
+      companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
+      labName: d.labName.trim(),
+      suspectedCause: d.suspectedCause.trim(),
+      correctiveActionTaken: d.correctiveActionTaken.trim(),
+      location: d.location, incidentNumber: d.incidentNumber,
+      dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
+      investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
+      recordsReviewed: records.map(r => r.trim()).filter(Boolean),
+      personsInteracted: persons.map(r => r.trim()).filter(Boolean),
+      priorSimilar: { occurred: d.priorOccurred, notes: d.priorNotes },
+      summary: d.summary,
+      chronology: chronology
+        .map(c => ({ date: c.date.trim(), time: c.time.trim(), event: c.event.trim() }))
+        .filter(c => c.event),
+      facts: facts.map(f => f.trim()).filter(Boolean),
+      sopExcerpts, photographs,
+      acceptedInvalidRows: Object.keys(acceptedRows),
+    };
+    if (isEdit && existing) {
+      // Preserve all AI-stage state
+      return {
+        ...base,
+        aiQuestions: existing.aiQuestions,
+        aiMissingChecks: existing.aiMissingChecks,
+        questionsInputHash: existing.questionsInputHash,
+        recommendationCategories: existing.recommendationCategories,
+        aiReport: existing.aiReport,
+        aiInputHash: existing.aiInputHash,
+        aiHistory: existing.aiHistory,
+        includeSupportNotesInReport: existing.includeSupportNotesInReport,
+        includePendingGapsInReport: existing.includePendingGapsInReport,
+        preparedBy: existing.preparedBy,
+        approvedBy: existing.approvedBy,
+      };
+    }
+    return base;
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -93,42 +167,22 @@ export default function NewInvestigation() {
       );
       return;
     }
-    const id = newInvestigationId();
-    const t = toast.loading('Saving investigation...');
-    let sopExcerpts: any[] = [];
-    let photographs: Photograph[] = [];
-    try {
-      if (docs.length) sopExcerpts = await parseSopFiles(docs);
-      if (photos.length) photographs = await Promise.all(photos.map(readImage));
-    } catch (e) {
-      console.warn(e);
-    }
-    const inv: HpgrdcInvestigation = {
-      id, createdAt: new Date().toISOString(),
-      incidentTitle: d.incidentTitle, classification: d.classification, numbers: d.numbers,
-      nm: d.nmNA ? 'Not Applicable' : d.nm.trim(),
-      pfe: d.pfeNA ? 'Not Applicable' : d.pfe.trim(),
-      injured: { company: +d.company || 0, contractor: +d.contractor || 0, visitors: +d.visitors || 0 },
-      injuredName: d.injuredName, ageSex: d.ageSex, ticketDept: d.ticketDept,
-      companyContractor: d.companyContractor, natureOfInjury: d.natureOfInjury, reportedBy: d.reportedBy,
-      labName: d.labName.trim(),
-      suspectedCause: d.suspectedCause.trim(),
-      correctiveActionTaken: d.correctiveActionTaken.trim(),
-      location: d.location, incidentNumber: d.incidentNumber,
-      dateOfIncident: d.dateOfIncident, timeOfIncident: d.timeOfIncident,
-      investigationInitiated: d.investigationInitiated, reportSubmission: d.reportSubmission,
-      recordsReviewed: records.map(r => r.trim()).filter(Boolean),
-      personsInteracted: persons.map(r => r.trim()).filter(Boolean),
-      priorSimilar: { occurred: d.priorOccurred, notes: d.priorNotes },
-      summary: d.summary,
-      chronology: chronology.filter(c => c.event.trim()),
-      facts: facts.map(f => f.trim()).filter(Boolean),
-      sopExcerpts, photographs,
-      acceptedInvalidRows: Object.keys(acceptedRows),
-    };
+    const t = toast.loading(isEdit ? 'Updating investigation...' : 'Saving investigation...');
+    const inv = await buildInvestigation();
     saveInvestigation(inv);
-    toast.success('Investigation saved', { id: t });
-    navigate(`/investigation/${id}`);
+    toast.success(isEdit ? 'Investigation updated' : 'Investigation saved', { id: t });
+    navigate(`/investigation/${inv.id}`);
+  };
+
+  const saveDraft = async () => {
+    const t = toast.loading('Saving draft...');
+    try {
+      const inv = await buildInvestigation();
+      saveInvestigation(inv);
+      toast.success('Draft saved', { id: t });
+    } catch {
+      toast.error('Failed to save draft', { id: t });
+    }
   };
 
   return (
@@ -249,7 +303,7 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Time of Incident</label>
-              <input className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <input type="time" className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
               <p className={helpClass}>Format: hh:mm (24h)</p>
             </div>
             <div>
@@ -302,17 +356,20 @@ export default function NewInvestigation() {
             <p className={helpClass + ' mb-2'}>Add one chronology event per row</p>
             <div className="space-y-2">
               {chronology.map((c, i) => (
-                <div key={i} className="flex gap-2">
-                  <input placeholder="hh:mm" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
+                <div key={i} className="flex flex-wrap gap-2">
+                  <input placeholder="dd-mm-yyyy" className={fieldClass + ' w-36'} value={c.date} onChange={e => {
+                    const n = [...chronology]; n[i] = {...n[i], date: e.target.value}; setChronology(n);
+                  }} />
+                  <input type="time" placeholder="hh:mm" className={fieldClass + ' w-32'} value={c.time} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], time: e.target.value}; setChronology(n);
                   }} />
-                  <input placeholder="Enter chronology event" className={fieldClass + ' flex-1'} value={c.event} onChange={e => {
+                  <input placeholder="Enter chronology event" className={fieldClass + ' flex-1 min-w-[200px]'} value={c.event} onChange={e => {
                     const n = [...chronology]; n[i] = {...n[i], event: e.target.value}; setChronology(n);
                   }} />
                   <button type="button" onClick={() => setChronology(chronology.filter((_,j)=>j!==i))} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                 </div>
               ))}
-              <button type="button" onClick={() => setChronology([...chronology, {time:'', event:''}])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
+              <button type="button" onClick={() => setChronology([...chronology, {date:'', time:'', event:''}])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><Plus className="h-3 w-3"/> Add row</button>
             </div>
           </div>
           <RepeatableList label="List of Facts collected during Investigation" help="Use factual observations only" items={facts} onChange={setFacts} placeholder="Enter fact collected" />
@@ -341,6 +398,18 @@ export default function NewInvestigation() {
                 ))}
               </div>
             )}
+            {existingSops.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {existingSops.map((s, i) => (
+                  <div key={`ex-${i}`} className="flex items-center gap-2 rounded border border-border bg-muted/40 px-2 py-1 text-xs">
+                    <FileText className="h-3 w-3 text-primary" />
+                    <span className="flex-1 truncate">{s.name}</span>
+                    <span className="text-[10px] text-muted-foreground">already attached</span>
+                    <button type="button" onClick={()=>setExistingSops(existingSops.filter((_,j)=>j!==i))}><X className="h-3 w-3" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -357,6 +426,17 @@ export default function NewInvestigation() {
                     <img src={URL.createObjectURL(f)} alt={f.name} className="h-20 w-full object-cover" />
                     <button type="button" onClick={()=>setPhotos(photos.filter((_,j)=>j!==i))} className="absolute right-0 top-0 rounded-bl bg-background/80 p-0.5"><X className="h-3 w-3" /></button>
                     <div className="truncate p-1 text-[10px]">{f.name}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {existingPhotos.length > 0 && (
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {existingPhotos.map((p, i) => (
+                  <div key={`ex-${i}`} className="relative overflow-hidden rounded border border-border bg-muted/40">
+                    <img src={p.dataUrl} alt={p.name} className="h-20 w-full object-cover" />
+                    <button type="button" onClick={()=>setExistingPhotos(existingPhotos.filter((_,j)=>j!==i))} className="absolute right-0 top-0 rounded-bl bg-background/80 p-0.5"><X className="h-3 w-3" /></button>
+                    <div className="truncate p-1 text-[10px]">{p.name}</div>
                   </div>
                 ))}
               </div>
@@ -398,10 +478,13 @@ export default function NewInvestigation() {
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 p-6">
+        <div className="flex flex-wrap items-center justify-end gap-3 p-6">
           <button type="button" onClick={()=>navigate('/')} className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          <button type="button" onClick={saveDraft} className="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-accent">
+            <Save className="h-4 w-4" /> Save Draft
+          </button>
           <button type="submit" className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
-            Save & Continue <ArrowRight className="h-4 w-4" />
+            {isEdit ? 'Save & Return to Analysis' : 'Save & Continue'} <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </form>

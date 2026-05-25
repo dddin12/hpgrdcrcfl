@@ -1,11 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileDown, Sparkles, Loader2, RefreshCw, ChevronRight, Pencil, HelpCircle, ListChecks, Tags, FileCheck2 } from 'lucide-react';
+import { FileDown, Sparkles, Loader2, RefreshCw, ChevronRight, Pencil, HelpCircle, ListChecks, Tags, FileCheck2, ArrowLeft, Save, Home, AlertTriangle, ChevronDown } from 'lucide-react';
 import {
   getInvestigation, computeInputHash, computeQuestionsHash,
   storeAiReport, updateAiReport, storeAiQuestions, patchInvestigation,
 } from '@/data/investigationStore';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { generateInvestigationReport } from '@/utils/generateReport';
 import HpgrdcReportView from '@/components/analysis/HpgrdcReportView';
 import EditAiAnalysisDialog from '@/components/analysis/EditAiAnalysisDialog';
@@ -22,6 +23,7 @@ import {
 
 export default function InvestigationDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [inv, setInv] = useState<HpgrdcInvestigation | undefined>(() => getInvestigation(id));
   const [busyFinal, setBusyFinal] = useState(false);
   const [busyQ, setBusyQ] = useState(false);
@@ -29,6 +31,8 @@ export default function InvestigationDetail() {
   const [currentHash, setCurrentHash] = useState<string>('');
   const [currentQHash, setCurrentQHash] = useState<string>('');
   const [editOpen, setEditOpen] = useState(false);
+  const [overrideStaleDownload, setOverrideStaleDownload] = useState(false);
+  const [dismissedStaleQ, setDismissedStaleQ] = useState(false);
 
   useEffect(() => {
     if (inv) {
@@ -37,8 +41,8 @@ export default function InvestigationDetail() {
     }
   }, [inv]);
 
-  const isStale = useMemo(() => !!inv?.aiReport && currentHash && inv.aiInputHash !== currentHash, [inv, currentHash]);
-  const isQuestionsStale = useMemo(() => !!inv?.aiQuestions?.length && currentQHash && inv.questionsInputHash !== currentQHash, [inv, currentQHash]);
+  const isStale = useMemo(() => !!(inv?.aiReport && currentHash && inv.aiInputHash !== currentHash), [inv, currentHash]);
+  const isQuestionsStale = useMemo(() => !!(inv?.aiQuestions?.length && currentQHash && inv.questionsInputHash !== currentQHash), [inv, currentQHash]);
 
   if (!inv) {
     return (
@@ -89,7 +93,10 @@ export default function InvestigationDetail() {
     setBusyFinal(true);
     try {
       const hash = await computeInputHash(inv);
-      const answers = (inv.aiQuestions || []).map(q => ({ question: q.question, answer: q.answer || '', status: q.status || 'not_checked', evidenceSource: q.evidenceSource }));
+      const allAnswers = (inv.aiQuestions || []).map(q => ({ question: q.question, answer: q.answer || '', status: q.status || 'not_checked', evidenceSource: q.evidenceSource }));
+      // Only confirmed answers are sent as ground truth
+      const answers = allAnswers.filter(a => a.status === 'answered' && a.answer.trim());
+      const pendingGaps = allAnswers.filter(a => !(a.status === 'answered' && a.answer.trim())).map(a => ({ question: a.question, status: a.status }));
       const missingCheckResponses = (inv.aiMissingChecks || []).map(m => ({ text: m.text, status: m.status || '', response: m.response || '' }));
       const { data, error } = await supabase.functions.invoke('generate-rcfa', {
         body: {
@@ -97,6 +104,7 @@ export default function InvestigationDetail() {
           sopExcerpts: inv.sopExcerpts || [],
           mode: 'final',
           answers,
+          pendingGaps,
           missingCheckResponses,
           recommendationCategories: inv.recommendationCategories || [],
         },
@@ -113,6 +121,7 @@ export default function InvestigationDetail() {
       const next = storeAiReport(inv, report);
       setInv(next);
       setCurrentHash(hash);
+      setOverrideStaleDownload(false);
       toast.success('Final investigation report generated');
     } catch (err: any) {
       console.error(err);
@@ -124,9 +133,23 @@ export default function InvestigationDetail() {
 
   const download = async () => {
     if (!inv.aiReport) { toast.error('Generate the report first'); return; }
+    if (isStale && !overrideStaleDownload) {
+      toast.error('Report is outdated. Regenerate or tap "Download existing report without regeneration".');
+      return;
+    }
+    // Chronology row-count guard
+    const renderable = (inv.chronology || []).filter(c => (c.event || '').trim());
+    if (renderable.length !== (inv.chronology || []).length) {
+      toast.error('Chronology row count mismatch. Please review report generation.');
+      return;
+    }
     setDownloading(true);
     try {
       await generateInvestigationReport(inv, inv.aiReport);
+      if (isStale && overrideStaleDownload) {
+        toast.message('Downloading previous report — note: inputs have changed.');
+        setOverrideStaleDownload(false);
+      }
       toast.success('Report downloaded — open the HTML file and print to PDF');
     } catch { toast.error('Failed to download'); }
     finally { setTimeout(() => setDownloading(false), 400); }
@@ -140,6 +163,20 @@ export default function InvestigationDetail() {
     }
     runGenerateFinal();
   };
+
+  const actionBar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <button onClick={()=>navigate(`/new-investigation/${inv.id}`)} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium hover:bg-accent">
+        <ArrowLeft className="h-3.5 w-3.5"/> Back to Edit Investigation
+      </button>
+      <button onClick={()=>{ patchInvestigation(inv, {}); toast.success('Draft saved'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium hover:bg-accent">
+        <Save className="h-3.5 w-3.5"/> Save Draft
+      </button>
+      <button onClick={()=>navigate('/')} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-medium hover:bg-accent">
+        <Home className="h-3.5 w-3.5"/> Return to Dashboard
+      </button>
+    </div>
+  );
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} className="space-y-5">
@@ -164,17 +201,35 @@ export default function InvestigationDetail() {
               <Pencil className="h-4 w-4"/> Edit AI Analysis
             </button>
           )}
-          <button onClick={download} disabled={!inv.aiReport || downloading} className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50">
+          <button onClick={download} disabled={!inv.aiReport || downloading || (isStale && !overrideStaleDownload)} className="inline-flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50">
             {downloading ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileDown className="h-4 w-4"/>}
             Download Report
           </button>
         </div>
       </div>
 
+      {actionBar}
+
+      {inv.aiReport && isStale && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs">
+          <p className="mb-2 flex items-center gap-2 font-semibold text-destructive">
+            <AlertTriangle className="h-4 w-4"/> Report may be outdated. Inputs changed since last generation.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={runGenerateFinal} disabled={busyFinal} className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-3 py-1.5 font-medium hover:bg-muted disabled:opacity-50">
+              <RefreshCw className="h-3.5 w-3.5"/> Regenerate AI Report
+            </button>
+            <button onClick={()=>setOverrideStaleDownload(true)} disabled={overrideStaleDownload} className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-3 py-1.5 font-medium hover:bg-muted disabled:opacity-50">
+              {overrideStaleDownload ? 'Override active — Download Report' : 'Download existing report without regeneration'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* STAGE 1 — AI Investigation Questions */}
       <StageCard
         icon={<HelpCircle className="h-5 w-5 text-primary" />}
-        title="Stage 1 — AI Investigation Questions"
+        title="Step 1 — AI Suggested Investigation Questions"
         description="AI reviews your inputs, SOPs and photos and returns grounded investigation questions. Cached until inputs change."
         right={
           !inv.aiQuestions?.length ? (
@@ -194,33 +249,46 @@ export default function InvestigationDetail() {
           )
         }
       >
-        {isQuestionsStale && <p className="mb-2 rounded bg-amber-500/15 px-2 py-1 text-[11px] font-semibold text-amber-500">Inputs changed since questions were generated — consider regenerating.</p>}
+        {isQuestionsStale && !dismissedStaleQ && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded bg-amber-500/15 px-2 py-1.5 text-[11px] text-amber-500">
+            <span className="font-semibold">Inputs changed. Existing AI questions may be outdated.</span>
+            <button onClick={()=>setDismissedStaleQ(true)} className="rounded border border-amber-500/40 bg-background/40 px-2 py-0.5 font-medium hover:bg-background/80">Keep existing questions</button>
+          </div>
+        )}
         <AiQuestionsPanel questions={inv.aiQuestions || []} onChange={updateQuestions} />
       </StageCard>
 
       {/* STAGE 2 — Missing checks */}
       <StageCard
         icon={<ListChecks className="h-5 w-5 text-primary" />}
-        title="Stage 2 — Missing Checks & Responses"
+        title="Step 2 — Missing Checks & Responses"
         description="Investigator marks each suggested missing-evidence check as accepted, ignored, or N/A."
       >
         <MissingChecksPanel checks={inv.aiMissingChecks || []} onChange={updateMissing} />
       </StageCard>
 
-      {/* STAGE 3 — Recommendation Categories */}
-      <StageCard
-        icon={<Tags className="h-5 w-5 text-primary" />}
-        title="Stage 3 — Recommendation Categories"
-        description="Choose the categories that apply. AI will only draft recommendations within these."
-      >
-        <RecommendationCategoriesPanel selected={inv.recommendationCategories || []} onChange={updateCategories} />
-      </StageCard>
+      {/* Advanced: Recommendation Categories (collapsible) */}
+      <Collapsible className="glass-card p-5">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-left">
+          <div className="flex items-start gap-3">
+            <Tags className="h-5 w-5 text-primary" />
+            <div>
+              <p className="text-sm font-semibold">Advanced — Guide Recommendation Type</p>
+              <p className="text-xs text-muted-foreground">Optional. Restrict AI recommendations to selected categories.</p>
+            </div>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180"/>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-4">
+          <RecommendationCategoriesPanel selected={inv.recommendationCategories || []} onChange={updateCategories} />
+        </CollapsibleContent>
+      </Collapsible>
 
-      {/* STAGE 4 — Final report */}
+      {/* STAGE 3 — Final report */}
       <StageCard
         icon={<FileCheck2 className="h-5 w-5 text-primary" />}
-        title="Stage 4 — Generate Final Report"
-        description="Uses your inputs plus confirmed answers, missing-check responses, and selected categories. Cached until any of those change."
+        title="Step 3 — Generate Final Report"
+        description="Uses your inputs plus confirmed answers, missing-check responses, and selected categories. Only answered questions are used as facts; unanswered questions remain as pending investigation gaps."
         right={
           !inv.aiReport ? (
             <button onClick={confirmFinalIfPending} disabled={busyFinal} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
@@ -255,6 +323,15 @@ export default function InvestigationDetail() {
             />
             Include investigation support notes in appendix (questions, missing checks, categories).
           </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={!!inv.includePendingGapsInReport}
+              onChange={e => setInv(patchInvestigation(inv, { includePendingGapsInReport: e.target.checked }))}
+              className="h-3.5 w-3.5 accent-primary"
+            />
+            Include pending investigation gaps in appendix.
+          </label>
           {pendingUnanswered > 0 && (
             <p className="rounded bg-amber-500/10 px-2 py-1 text-[11px] text-amber-500">
               {pendingUnanswered} unanswered question{pendingUnanswered === 1 ? '' : 's'} — these will remain as visible investigation gaps.
@@ -282,6 +359,8 @@ export default function InvestigationDetail() {
           }}
         />
       )}
+
+      {actionBar}
     </motion.div>
   );
 }

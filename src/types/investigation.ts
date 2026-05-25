@@ -44,6 +44,7 @@ export interface AiQuestion {
   evidenceSource: 'User input' | 'SOP/manual' | 'Photo' | 'Missing evidence' | string;
   answer?: string;
   status?: 'answered' | 'na' | 'not_checked' | 'not_available';
+  sopRef?: string;
 }
 
 export interface AiMissingCheck {
@@ -102,7 +103,7 @@ export interface HpgrdcInvestigation {
 
   // Section D — Narrative
   summary: string;
-  chronology: { time?: string; event: string }[];
+  chronology: { date?: string; time?: string; event: string }[];
   facts: string[];
 
   // Section E — Attachments
@@ -120,6 +121,7 @@ export interface HpgrdcInvestigation {
   questionsInputHash?: string;
   recommendationCategories?: string[];
   includeSupportNotesInReport?: boolean;
+  includePendingGapsInReport?: boolean;
 
   // Validation override — keys of "Accept as valid technical input" rows
   acceptedInvalidRows?: string[];

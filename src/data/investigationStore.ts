@@ -47,10 +47,24 @@ export function newInvestigationId(): string {
   return `HPGRDC-${year}-${rand}`;
 }
 
-/** Canonical JSON of user-entered fields + attachment names — shared by both hashes. */
+/** Quick non-cryptographic content fingerprint (fnv-1a-ish, 32-bit hex). */
+function shortHash(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** Canonical JSON of user-entered fields + attachment content hashes. */
 function canonicalInputs(inv: HpgrdcInvestigation): string {
-  const photos = (inv.photographs || []).map(p => p.name).sort();
-  const sops = (inv.sopExcerpts || []).map(s => s.name).sort();
+  const photos = (inv.photographs || [])
+    .map(p => ({ name: p.name, hash: shortHash(p.dataUrl || '') }))
+    .sort((a, b) => (a.name + a.hash).localeCompare(b.name + b.hash));
+  const sops = (inv.sopExcerpts || [])
+    .map(s => ({ name: s.name, hash: shortHash(JSON.stringify(s.pages || [])) }))
+    .sort((a, b) => (a.name + a.hash).localeCompare(b.name + b.hash));
   const o = {
     incidentTitle: inv.incidentTitle, classification: inv.classification, numbers: inv.numbers,
     nm: inv.nm, pfe: inv.pfe,

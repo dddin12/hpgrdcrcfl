@@ -11,13 +11,15 @@ import rndLogo from '@/assets/rnd-logo.png';
 export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestigation; report: HpgrdcAiReport }) {
   const causeItems = [report.whyTree.cause.primary, report.whyTree.cause.secondary || ''].filter(Boolean);
   const chronList = (inv.chronology || [])
-    .map(c => ({ time: (c.time || '').trim(), event: (c.event || '').trim() }))
-    .filter(c => c.event || c.time);
+    .map(c => ({ date: (c.date || '').trim(), time: (c.time || '').trim(), event: (c.event || '').trim() }))
+    .filter(c => c.event || c.time || c.date);
   const isNA = inv.classification === 'NA' || inv.classification === '';
   const nmText = (inv.nm || '').trim() || (isNA ? 'Not Applicable' : '');
   const pfeText = (inv.pfe || '').trim() || (isNA ? 'Not Applicable' : '');
   const includeAppendix = !!inv.includeSupportNotesInReport;
+  const includePending = !!inv.includePendingGapsInReport;
   const confirmedQs = (inv.aiQuestions || []).filter(q => (q.answer || '').trim() || (q.status && q.status !== 'not_checked'));
+  const pendingGapQs = (inv.aiQuestions || []).filter(q => !(q.status === 'answered' && (q.answer || '').trim()));
   const acceptedChecks = (inv.aiMissingChecks || []).filter(m => m.status && m.status !== 'ignore');
   const cats = inv.recommendationCategories || [];
   return (
@@ -112,7 +114,7 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
       {chronList.length > 0 && (<>
         <H>Chronology of Events</H>
         <ol className="list-decimal space-y-1 border border-border p-3 pl-8 text-xs">
-          {chronList.map((c, i) => <li key={i}>{formatChronologyLine(c.time, c.event)}</li>)}
+          {chronList.map((c, i) => <li key={i}>{formatChronologyLine(c.date, c.time, c.event)}</li>)}
         </ol>
       </>)}
 
@@ -237,6 +239,17 @@ export default function HpgrdcReportView({ inv, report }: { inv: HpgrdcInvestiga
               <p className="border border-border p-3 text-xs">{cats.join(' • ')}</p>
             </div>
           )}
+        </>
+      )}
+
+      {includePending && pendingGapQs.length > 0 && (
+        <>
+          <H>Appendix — Pending Investigation Gaps</H>
+          <ul className="list-disc space-y-1 border border-border p-3 pl-8 text-xs">
+            {pendingGapQs.map(q => (
+              <li key={q.id}>{q.question} <span className="text-muted-foreground">— {q.status || 'not checked'}</span></li>
+            ))}
+          </ul>
         </>
       )}
     </div>
