@@ -303,7 +303,7 @@ export default function NewInvestigation() {
             </div>
             <div>
               <label className={labelClass}>Time of Incident</label>
-              <input className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
+              <input type="time" className={fieldClass} placeholder="hh:mm" value={d.timeOfIncident} onChange={e=>upd('timeOfIncident', e.target.value)} />
               <p className={helpClass}>Format: hh:mm (24h)</p>
             </div>
             <div>
