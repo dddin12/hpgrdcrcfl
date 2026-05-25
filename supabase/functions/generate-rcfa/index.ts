@@ -27,18 +27,20 @@ const CERTAINTY_REGEX = /\b(confirmed root cause|definitively|definitely caused|
 const BANNED_VERBS = /\b(improve|improving|enhance|enhancing|optimize|optimizing|optimise|consider|considering|explore|exploring)\b/gi;
 
 const QUESTIONS_SYSTEM_PROMPT = `You are an HPGRDC Incident Investigation assistant in QUESTION mode. You DO NOT draw conclusions, you DO NOT propose causes, you DO NOT propose recommendations. Your only job is to help the investigator by:
-1. Producing 6–12 SPECIFIC investigation questions grounded in the user-entered facts, the attached SOP/manual excerpts, and photo names.
-2. Producing UP TO 5 "Missing checks" — short evidence the investigator should still verify.
+1. Producing 6–12 SPECIFIC investigation questions grounded in the user-entered facts, the attached SOP/manual excerpts (and the extracted controls list when present), and photo names.
+2. Producing UP TO 5 "Missing checks" — short, concrete evidence the investigator should still verify, framed as "To verify: …".
 
 ABSOLUTE GROUNDING (highest priority):
 - Use ONLY what is present in user inputs, SOP/manual excerpts, or photo names. Never invent equipment, instruments, control systems, or procedures.
 - FORBIDDEN unless the exact term appears in inputs: SCADA, MFC, syringe pump, interlock, IoT, smart sensor, predictive analytics, predictive maintenance, automation, digital twin, AI monitoring, machine learning, sensor failure.
-- Never ask generic questions like "Was the SOP followed?" or "Were safety procedures observed?". Reference the SPECIFIC SOP step, manual limit, photo detail, or chronology fact.
-- Preferred form: "Which specific SOP step <X> requires verification, and is evidence available that it was completed?"
+- Never ask generic questions like "Was the SOP followed?", "Were safety procedures observed?", "Was the equipment inspected?", "Was training given?", "Did the operator follow procedure?". Reference the SPECIFIC SOP step, manual limit, photo detail, or chronology fact.
+- Good example: "Was the fuel line pressure verified at ≥ 0.7 bar before powering ON the FCU pump, per the SOP startup check?"
+- Bad example: "Was the SOP followed during startup?" — too generic, drop it.
 - Each question must include:
    - "why": one short line explaining why the question matters for this investigation.
    - "evidenceSource": EXACTLY one of "User input", "SOP/manual", "Photo", "Missing evidence". Do not invent page numbers; mention a page only if the SOP excerpt explicitly carries one in its label.
-- Missing checks must be concrete physical/procedural items the investigator should still verify (e.g. "Verify last calibration date of the temperature gauge mentioned in fact #3"). Each <= 140 chars.
+   - Optional "sopRef": short reference like "<document> p.<n>" — only include when the page number literally appears in the SOP excerpt label. Otherwise omit.
+- Missing checks must be concrete physical/procedural items the investigator should still verify (e.g. "To verify: last calibration date of the temperature gauge mentioned in fact #3"). Each <= 140 chars.
 - Do not suggest causes, fixes, or recommendations. Do not classify severity. Do not draw the WHY Tree.
 
 Call emit_questions exactly once.`;
@@ -56,6 +58,7 @@ const QUESTIONS_SCHEMA = {
           question: { type: 'string' },
           why: { type: 'string' },
           evidenceSource: { type: 'string' },
+          sopRef: { type: 'string' },
         },
         required: ['question', 'why', 'evidenceSource'],
       },
@@ -193,6 +196,40 @@ function formatSopBlock(sopExcerpts: any[]): string {
   return '\n\nATTACHED SOP / MANUAL EXCERPTS:\n' + parts.join('\n\n');
 }
 
+/** Heuristic extraction of concrete SOP/manual controls. */
+function extractSopControls(sopExcerpts: any[]): { document: string; page?: string; text: string; tag: string }[] {
+  const out: { document: string; page?: string; text: string; tag: string }[] = [];
+  const tagWords: { tag: string; re: RegExp }[] = [
+    { tag: 'startup',     re: /\b(startup|start[- ]up|power[- ]on|switch on|power on|initiat)/i },
+    { tag: 'shutdown',    re: /\b(shutdown|shut[- ]down|power[- ]off|switch off|isolat|emergency stop|e-?stop)/i },
+    { tag: 'inspection',  re: /\b(inspect|check|verify|record|logbook|checklist|confirm)/i },
+    { tag: 'limit',       re: /\b(pressure|temperature|temp|flow|load|level|limit|minimum|maximum|min|max)\b.{0,40}\d/i },
+    { tag: 'hazard',      re: /\b(leak|loose|tighten|spill|hazard|fire|static|vapou?r|overpressure|connection)\b/i },
+    { tag: 'equipment',   re: /\b(valve|pump|MCB|switch|line|tank|FCU|HMI|VFD|burner|nozzle)\b/i },
+  ];
+  for (const s of sopExcerpts || []) {
+    const doc = String(s?.name || 'document').slice(0, 80);
+    const pages = Array.isArray(s?.pages) ? s.pages : [];
+    for (const p of pages) {
+      const pageLabel = p?.page !== undefined && p?.page !== null ? String(p.page) : '';
+      const text = String(p?.text || '');
+      const lines = text.split(/\r?\n+|\.(?=\s)/).map(l => l.trim()).filter(l => l.length >= 12 && l.length <= 220);
+      for (const line of lines) {
+        for (const { tag, re } of tagWords) {
+          if (re.test(line)) {
+            out.push({ document: doc, page: pageLabel || undefined, text: line.slice(0, 200), tag });
+            break;
+          }
+        }
+        if (out.length >= 40) break;
+      }
+      if (out.length >= 40) break;
+    }
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -242,6 +279,11 @@ Deno.serve(async (req: Request) => {
     // ============ QUESTIONS MODE ============
     if (mode === 'questions') {
       const qModel = 'google/gemini-3-flash-preview';
+      const sopControls = extractSopControls(sopExcerpts);
+      const controlsBlock = sopControls.length
+        ? '\n\nSOP/MANUAL EXTRACTED CONTROLS (use these specific items to anchor questions):\n' +
+          sopControls.map(c => `- [${c.tag}] [${c.document}${c.page ? ' p.' + c.page : ''}] ${c.text}`).join('\n')
+        : '';
       const qUserMsg = `INVESTIGATION INPUTS:
 ${JSON.stringify({
   incidentTitle: inv.incidentTitle, classification: inv.classification,
@@ -252,7 +294,7 @@ ${JSON.stringify({
   summary: inv.summary, chronology: inv.chronology, facts: inv.facts,
   suspectedCause: inv.suspectedCause, correctiveActionTaken: inv.correctiveActionTaken,
   photoNames,
-}, null, 2)}${formatSopBlock(sopExcerpts)}
+}, null, 2)}${formatSopBlock(sopExcerpts)}${controlsBlock}
 
 GROUNDED VOCABULARY (only these technical terms are allowed): ${Array.from(groundedTokens).slice(0, 400).join(', ')}
 
@@ -285,7 +327,13 @@ Produce 6–12 grounded investigation questions and up to 5 missing checks. Call
 
       const allowedSources = new Set(['User input', 'SOP/manual', 'Photo', 'Missing evidence']);
       // Filter generic questions
-      const genericRe = /^(was|were)\s+(the\s+)?(sop|procedure|safety|protocol|standard|guideline)s?\s+(followed|observed|adhered)/i;
+      const genericPatterns: RegExp[] = [
+        /^(was|were)\s+(the\s+)?(sop|procedure|safety|protocol|standard|guideline)s?\s+(followed|observed|adhered)/i,
+        /^was\s+(the\s+)?equipment\s+inspected/i,
+        /^was\s+training\s+given/i,
+        /^did\s+the\s+operator\s+follow/i,
+      ];
+      const isGeneric = (t: string) => genericPatterns.some(re => re.test(t));
 
       const cleanForbidden = (s: string): string | null => {
         for (const term of FORBIDDEN_TERMS) {
@@ -298,16 +346,18 @@ Produce 6–12 grounded investigation questions and up to 5 missing checks. Call
       const cleanedQ = (Array.isArray(parsed.questions) ? parsed.questions : [])
         .map((q: any, i: number) => {
           const text = String(q?.question || '').trim();
-          if (!text || genericRe.test(text)) return null;
+          if (!text || isGeneric(text)) return null;
           const cleaned = cleanForbidden(text);
           if (!cleaned) return null;
           const src = String(q?.evidenceSource || '').trim();
           const evidenceSource = allowedSources.has(src) ? src : 'Missing evidence';
+          const sopRef = String(q?.sopRef || '').trim();
           return {
             id: `q${Date.now().toString(36)}-${i}`,
             question: cleaned,
             why: String(q?.why || '').trim(),
             evidenceSource,
+            ...(sopRef ? { sopRef: sopRef.slice(0, 140) } : {}),
           };
         })
         .filter(Boolean)
@@ -315,8 +365,9 @@ Produce 6–12 grounded investigation questions and up to 5 missing checks. Call
 
       const cleanedM = (Array.isArray(parsed.missingChecks) ? parsed.missingChecks : [])
         .map((m: any, i: number) => {
-          const text = String(m?.text || '').trim();
+          let text = String(m?.text || '').trim();
           if (!text) return null;
+          if (!/^to verify[:\s]/i.test(text)) text = 'To verify: ' + text.replace(/^verify[:\s]+/i, '');
           const cleaned = cleanForbidden(text);
           if (!cleaned) return null;
           return { id: `m${Date.now().toString(36)}-${i}`, text: cleaned.slice(0, 200) };
