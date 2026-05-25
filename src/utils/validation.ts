@@ -88,7 +88,7 @@ export function isLikelyGibberish(s: string): boolean {
 export interface InvalidRow { section: string; index: number; text: string; reason: string; key: string; }
 
 export function findInvalidRows(input: {
-  chronology: { time?: string; event: string }[];
+  chronology: { date?: string; time?: string; event: string }[];
   facts: string[];
   recordsReviewed: string[];
   personsInteracted: string[];
@@ -106,17 +106,40 @@ export function findInvalidRows(input: {
 }
 
 /** Merge chronology time + event into a natural sentence. */
-export function formatChronologyLine(time: string | undefined, event: string): string {
-  const ev = (event || '').trim();
-  const tm = (time || '').trim();
-  if (!ev) return tm;
-  if (!tm) return ev;
-  // If event already mentions the time, don't double it
-  if (ev.toLowerCase().includes(tm.toLowerCase())) return ev;
-  // If event starts with "At " already, keep as-is and prepend time differently
-  if (/^at\s+/i.test(ev)) return ev;
-  const first = ev.charAt(0);
-  const rest = ev.slice(1);
-  const lower = first.toLowerCase() + rest;
-  return `At ${tm}, ${lower}`;
+export function formatChronologyLine(
+  timeOrDate: string | undefined,
+  eventOrTime?: string,
+  eventArg?: string,
+): string {
+  // Backwards-compatible: support (time, event) and (date, time, event)
+  let date = '', time = '', event = '';
+  if (eventArg !== undefined) {
+    date = (timeOrDate || '').trim();
+    time = (eventOrTime || '').trim();
+    event = (eventArg || '').trim();
+  } else {
+    time = (timeOrDate || '').trim();
+    event = (eventOrTime || '').trim();
+  }
+  const tmDisplay = formatTimeDisplay(time);
+  const parts: string[] = [];
+  if (date) parts.push(date);
+  if (tmDisplay) parts.push(tmDisplay);
+  const prefix = parts.length ? parts.join(', ') + ' — ' : '';
+  if (!event) return parts.join(', ');
+  return prefix + event;
+}
+
+/** Convert HH:mm 24h to "h:mm am/pm". Pass-through other formats. */
+export function formatTimeDisplay(time: string | undefined): string {
+  const t = (time || '').trim();
+  if (!t) return '';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+  if (!m) return t;
+  let h = parseInt(m[1], 10);
+  const mm = m[2];
+  if (isNaN(h) || h < 0 || h > 23) return t;
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${mm} ${ampm}`;
 }
