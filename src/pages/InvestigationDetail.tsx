@@ -11,6 +11,7 @@ import { generateInvestigationReport } from '@/utils/generateReport';
 import HpgrdcReportView from '@/components/analysis/HpgrdcReportView';
 import EditAiAnalysisDialog from '@/components/analysis/EditAiAnalysisDialog';
 import AiQuestionsPanel from '@/components/analysis/AiQuestionsPanel';
+import { isAiQuestionPending } from '@/components/analysis/AiQuestionsPanel';
 import MissingChecksPanel from '@/components/analysis/MissingChecksPanel';
 import RecommendationCategoriesPanel from '@/components/analysis/RecommendationCategoriesPanel';
 import { supabase } from '@/integrations/supabase/client';
@@ -94,9 +95,13 @@ export default function InvestigationDetail() {
     try {
       const hash = await computeInputHash(inv);
       const allAnswers = (inv.aiQuestions || []).map(q => ({ question: q.question, answer: q.answer || '', status: q.status || 'not_checked', evidenceSource: q.evidenceSource }));
-      // Only confirmed answers are sent as ground truth
+      // SAFEGUARD: Only confirmed answers are sent as ground truth.
+      // Pending questions (not_checked / not_available / blank) are sent as pendingGaps only.
+      // N/A questions are dropped entirely — neither facts nor pending. Do NOT auto-mark pending as answered.
       const answers = allAnswers.filter(a => a.status === 'answered' && a.answer.trim());
-      const pendingGaps = allAnswers.filter(a => !(a.status === 'answered' && a.answer.trim())).map(a => ({ question: a.question, status: a.status }));
+      const pendingGaps = allAnswers
+        .filter(a => a.status !== 'na' && !(a.status === 'answered' && a.answer.trim()))
+        .map(a => ({ question: a.question, status: a.status }));
       const missingCheckResponses = (inv.aiMissingChecks || []).map(m => ({ text: m.text, status: m.status || '', response: m.response || '' }));
       const { data, error } = await supabase.functions.invoke('generate-rcfa', {
         body: {
@@ -155,14 +160,9 @@ export default function InvestigationDetail() {
     finally { setTimeout(() => setDownloading(false), 400); }
   };
 
-  const pendingUnanswered = (inv.aiQuestions || []).filter(q => !q.status || q.status === 'not_checked').length;
-  const confirmFinalIfPending = () => {
-    if (pendingUnanswered > 0) {
-      const ok = window.confirm(`Unanswered investigation questions may reduce RCFA quality. You have ${pendingUnanswered} pending question${pendingUnanswered === 1 ? '' : 's'}. Generate the final report anyway?`);
-      if (!ok) return;
-    }
-    runGenerateFinal();
-  };
+  // SAFEGUARD: pendingUnanswered uses the shared isPending rule.
+  // N/A is NOT pending. Not checked / Evidence not available / blank ARE pending.
+  const pendingUnanswered = (inv.aiQuestions || []).filter(isAiQuestionPending).length;
 
   const actionBar = (
     <div className="flex flex-wrap items-center gap-2">
@@ -291,14 +291,37 @@ export default function InvestigationDetail() {
         description="Uses your inputs plus confirmed answers, missing-check responses, and selected categories. Only answered questions are used as facts; unanswered questions remain as pending investigation gaps."
         right={
           !inv.aiReport ? (
-            <button onClick={confirmFinalIfPending} disabled={busyFinal} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
-              {busyFinal ? <Loader2 className="h-4 w-4 animate-spin"/> : <Sparkles className="h-4 w-4"/>}
-              {busyFinal ? 'Generating…' : 'Generate Final Report'}
-            </button>
+            pendingUnanswered > 0 ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button disabled={busyFinal} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                    {busyFinal ? <Loader2 className="h-4 w-4 animate-spin"/> : <Sparkles className="h-4 w-4"/>}
+                    {busyFinal ? 'Generating…' : 'Continue with Pending Questions'}
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Continue with pending AI questions?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Some AI-suggested investigation questions are unanswered. These will not be used as facts or conclusions. They will be treated only as pending investigation gaps. Pending questions stay pending — they are not auto-marked as answered or accepted.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Go Back and Answer</AlertDialogCancel>
+                    <AlertDialogAction onClick={runGenerateFinal}>Continue Anyway</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <button onClick={runGenerateFinal} disabled={busyFinal} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                {busyFinal ? <Loader2 className="h-4 w-4 animate-spin"/> : <Sparkles className="h-4 w-4"/>}
+                {busyFinal ? 'Generating…' : 'Generate Final Report'}
+              </button>
+            )
           ) : (
             <ConfirmButton
               disabled={busyFinal || !isStale}
-              onConfirm={confirmFinalIfPending}
+              onConfirm={runGenerateFinal}
               label={busyFinal ? 'Generating…' : 'Regenerate'}
               icon={busyFinal ? <Loader2 className="h-4 w-4 animate-spin"/> : <RefreshCw className="h-4 w-4"/>}
               title="Regenerate final report?"
@@ -334,7 +357,7 @@ export default function InvestigationDetail() {
           </label>
           {pendingUnanswered > 0 && (
             <p className="rounded bg-amber-500/10 px-2 py-1 text-[11px] text-amber-500">
-              {pendingUnanswered} unanswered question{pendingUnanswered === 1 ? '' : 's'} — these will remain as visible investigation gaps.
+              {pendingUnanswered} unanswered question{pendingUnanswered === 1 ? '' : 's'} — these stay pending and are not used as facts or conclusions.
             </p>
           )}
         </div>
