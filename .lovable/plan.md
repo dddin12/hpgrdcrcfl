@@ -1,117 +1,41 @@
-# AI-Assisted Investigation Workflow (Final)
+## Root cause
 
-Shift from "AI guesses WHY Tree" to "AI asks → investigator confirms → AI formats". Layer on top of existing flow without breaking what works. AI calls are cached and gated by an input hash.
+`src/utils/validation.ts` flags valid technical sentences because `BLOCKLIST` is checked **per token** and contains real engineering words (`test`, `bar`, `temp`). Token-level rules also reject legitimate acronyms (`HPGRDC`, `SPARC`, `PSSR`).
 
-## 1. Four-stage guided flow on Investigation Detail
+## Fix — only touches `src/utils/validation.ts` and `src/pages/NewInvestigation.tsx`. No AI flow, report, dashboard, or styling changes.
 
-```text
-Stage 1: AI Investigation Questions
-Stage 2: Missing Checks + User Responses
-Stage 3: Recommendation Categories
-Stage 4: Generate Final Report
-```
+### 1. `src/utils/validation.ts`
 
-Buttons present throughout: Back to Edit, Save Draft, Continue Later.
+- Trim `BLOCKLIST` to unambiguous placeholders only: `dummy, asdf, qwerty, hggg, xxxx, xxx, tbd, lorem, abcd, 1234, 12345, aaaa, zzzz`. **Remove `test`, `bar`, `temp`, `foo`, `baz`.**
+- Apply BLOCKLIST **only when the entire trimmed string equals a blocklist word** (placeholder rows). Drop the per-token blocklist check.
+- Add `TECH_ALLOWLIST` (uppercase) with: `SOP, SMP, MOC, PSSR, HPGRDC, HPCL, RND, ETC, FCU, FCS, CCU, CAHU, AHU, HMI, ICS, VFD, SPARC, STARS, MCB, EBP, BAR, KG, RPM, KW, LPH, SLPH, ON, OFF, DEGC`.
+- Add `normalizeToken(tok)`:
+  - uppercase
+  - replace `&` with empty (so `R&D` → `RD`) **and** map literal `R&D` → `RND` before stripping
+  - strip all non-alphanumerics, then strip trailing digits (`ETC-1` → `ETC`, `0.7` → empty)
+  - return normalized string
+- Tokens whose normalized form is in `TECH_ALLOWLIST` bypass the vowel-less rule. Pure-numeric/empty normalized tokens (e.g. `0.7`) also bypass.
+- Multi-word fast path — return `false` (valid) if any of:
+  - 3+ tokens AND at least one vowel anywhere
+  - measurement regex matches: `/\b\d+(?:\.\d+)?\s*(?:bar|kg|kw|rpm|lph|slph|deg\s?c|°c)\b/i` (case-insensitive)
+  - row starts with (case-insensitive): `SOP requires`, `Manual states`, `Equipment manual`, `As per SOP`, `As per checklist`, `As per manual`
+- Keep strict single-token rules (length < 6, no vowel, 3+ repeated letter) so `hggg`/`xxxx`/key-mashes still fail.
+- Change `InvalidRow` to `{ section, index, text, reason }` and have `findInvalidRows` return a specific reason (`Placeholder word "dummy"`, `Random key-mash (no vowels)`, `Too short`, etc.).
 
-- Stages 1 & 2 share a single AI call (`mode: 'questions'`) and are **cached** against `questionsInputHash` (inputs + SOPs + photos). Reopening the page never re-calls AI; only changed inputs invalidate the cache.
-- Stage 3 is pure UI — no AI call.
-- Stage 4 calls `mode: 'final'`, cached against `aiInputHash` (inputs + answers + missing-check responses + categories).
-- "Generate with unanswered questions" requires confirming a warning: *"Unanswered investigation questions may reduce RCFA quality."* Unanswered questions persist as visible pending gaps in the working screen.
+### 2. `src/pages/NewInvestigation.tsx`
 
-Model selection:
-- `mode: 'questions'` → `google/gemini-3-flash-preview` (cheap).
-- `mode: 'final'` → `google/gemini-2.5-pro` (stronger reasoning).
-- No AI is invoked for dashboard, downloads, form rendering, or viewing a saved report.
+- Add `acceptedRows: Record<string, true>` to form state, keyed by `${section}:${index}:${text}`. Persist it on the draft `HpgrdcInvestigation` as `acceptedInvalidRows?: string[]` (also add the optional field to `HpgrdcInvestigation` in `src/types/investigation.ts`) so re-opening a draft keeps the override.
+- On submit, filter `findInvalidRows` results through `acceptedRows` before blocking.
+- Render an inline panel above the submit button listing each remaining invalid row: `Field • Row # • full text • reason` with a per-row **"Accept as valid technical input"** checkbox that updates `acceptedRows`.
+- Keep a concise toast: `Facts #3 — placeholder word "dummy". Fix or mark "Accept as valid technical input".`
 
-## 2. Edge function `generate-rcfa` extended with `mode`
+### 3. Tiny type addition (`src/types/investigation.ts`)
 
-- `mode: 'questions'` → returns `{ questions: [{id, question, why, evidenceSource}], missingChecks: [{id, text}] }`.
-- `mode: 'final'` → accepts `answers`, `missingCheckResponses`, `recommendationCategories`; returns existing `HpgrdcAiReport`.
+Add `acceptedInvalidRows?: string[]` to `HpgrdcInvestigation`. No other model changes.
 
-**Question-quality rules in system prompt:**
-- Questions must reference specific SOP step, manual limit, photo detail, or chronology fact. Forbid generic questions like "Was SOP followed?". Require form: *"Which specific SOP step X requires verification, and is evidence available that it was completed?"*
-- `evidenceSource` must be exactly one of: `User input`, `SOP/manual`, `Photo`, `Missing evidence`.
-- Cite page numbers **only if** the parser captured them (`SopExcerpt.pages[i].page` is a real number); otherwise omit.
-- Existing grounding/post-filter (no SCADA/MFC/IoT/interlock unless in inputs) stays.
+## Acceptance
 
-Recommendation post-filter for `final`:
-- Allow verbs: include, verify, inspect, maintain, update, display, mark, train, record, check, brief, provide.
-- Strip banned verbs: improve, enhance, optimize, consider, explore + existing IoT/SCADA/predictive blocklist.
-- `responsibility`, `targetDate`, `verifiedBy` stay blank unless user typed values via Edit dialog.
-
-## 3. Data model (`src/types/investigation.ts`)
-
-Add to `HpgrdcInvestigation`:
-```ts
-labName?: string;
-suspectedCause?: string;
-correctiveActionTaken?: string;
-aiQuestions?: { id; question; why; evidenceSource; answer?; status?: 'answered'|'na'|'not_checked'|'not_available' }[];
-aiMissingChecks?: { id; text; status?: 'accept'|'ignore'|'na'; response? }[];
-questionsInputHash?: string;        // cache key for stages 1+2
-recommendationCategories?: string[];
-includeSupportNotesInReport?: boolean; // default false
-```
-
-Update `Classification` to `'NA' | 'FATAL' | 'LWC' | 'RWC' | 'MTC' | 'FAC'`. NM/PFE remain free text; add an N/A toggle that locks the field and stores literal `"Not Applicable"`.
-
-Update `canonicalInputs` in `investigationStore.ts`:
-- `questionsInputHash` covers: inputs + SOP names + photo names + suspectedCause + correctiveActionTaken.
-- `aiInputHash` (final) extends that with answers + missing-check responses + categories.
-
-## 4. New UI components
-
-- `src/components/analysis/AiQuestionsPanel.tsx` — question cards with Why / Source / Answer / Status. Pending unanswered count displayed.
-- `src/components/analysis/MissingChecksPanel.tsx` — Accept / Ignore / N/A + optional response.
-- `src/components/analysis/RecommendationCategoriesPanel.tsx` — checkbox grid of **12 categories**:
-  SOP revision, Checklist update, Operator briefing/training, Equipment inspection, Visual label/marking, Verification record, Maintenance check, Engineering safeguard review, Manual limit display, Housekeeping, **Spill / leak control**, Emergency stop awareness.
-- `InvestigationDetail.tsx` orchestrates the four stages, the cache hashes, and the regeneration warning *"Inputs have changed. Regeneration will consume one AI call and create a new report version."*
-
-## 5. NewInvestigation form
-
-- Add `labName`, `suspectedCause`, `correctiveActionTaken`.
-- Classification dropdown first option: `Not Applicable`.
-- NM/PFE: N/A toggle.
-- Strict placeholder allow-list (Enter incident title / lab name / location / reported by / chronology event / fact / reviewed document / interacted person / record collected / `dd-mm-yyyy` / `hh:mm am/pm` / Not Applicable).
-- No demo data, no prefilled WHY Tree or recommendations anywhere.
-
-## 6. Dashboard
-
-Columns: **Date | Lab Name | Incident Title | Location | Classification | Reported By | Action**.
-Drop visible ID column. Action menu: Open / Edit Draft / Download Report (download disabled until `aiReport` exists).
-
-## 7. Classification rendering (form + report)
-
-If `classification === 'NA'`:
-- Do not highlight any of FATAL/LWC/RWC/MTC/FAC in the 7-column table.
-- Render NM/PFE cells with the user-entered text.
-- If NM/PFE are also N/A, show literal `Not Applicable` in those cells.
-
-## 8. Final HPGRDC report cleanliness
-
-`generateReport.ts` + `HpgrdcReportView.tsx`:
-- Default report stays clean HPGRDC-style — **no AI questions, missing checks, or categories rendered**.
-- A new checkbox on the detail page: *"Include investigation support notes in appendix."* When ticked, append an "Investigation Support Notes" section with: confirmed answers, accepted/ignored missing checks, selected recommendation categories.
-- `EditAiAnalysisDialog` continues to bypass AI for manual edits.
-
-## 9. Regeneration guard
-
-`InvestigationDetail` shows Regenerate only when the relevant hash differs. Otherwise shows View / Download / Edit AI Analysis only. Stage 1 has its own "Regenerate Questions" with the same guard.
-
-## Files changed
-- `src/types/investigation.ts`
-- `src/data/investigationStore.ts`
-- `src/pages/NewInvestigation.tsx`
-- `src/pages/InvestigationDetail.tsx`
-- `src/pages/Dashboard.tsx`
-- `src/utils/generateReport.ts`
-- `src/components/analysis/HpgrdcReportView.tsx`
-- `supabase/functions/generate-rcfa/index.ts`
-- `src/components/analysis/AiQuestionsPanel.tsx` (new)
-- `src/components/analysis/MissingChecksPanel.tsx` (new)
-- `src/components/analysis/RecommendationCategoriesPanel.tsx` (new)
-
-No DB migrations; storage stays in localStorage.
-
-## Out of scope
-Auth, backend persistence, dashboard analytics logic, visual restyling.
+- ETC-1 fuel-leakage facts ("Engine Test Cell startup", "Fuel Conditioning Unit…", "SOP requires…", "0.7 bar before FCU pump startup", "No fire, injury, or equipment damage") all pass without override.
+- `R&D`, `ETC-1`, `HPGRDC`, `SPARC`, `STARS`, `PSSR`, `FCU`, `0.7 bar`, `Bar`, `BAR`, `KG`, `kW`, `deg C`, `°C` all pass.
+- `asdf`, `hggg`, `dummy` still blocked, with the exact reason shown.
+- Marking a row "Accept as valid technical input" persists with the draft and is not re-flagged on reopen.

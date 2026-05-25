@@ -121,6 +121,9 @@ export interface HpgrdcInvestigation {
   recommendationCategories?: string[];
   includeSupportNotesInReport?: boolean;
 
+  // Validation override — keys of "Accept as valid technical input" rows
+  acceptedInvalidRows?: string[];
+
   // For dashboard convenience
   preparedBy?: string;
   approvedBy?: string;
