@@ -384,6 +384,7 @@ Produce 6–12 grounded investigation questions and up to 5 missing checks. Call
     const deepReview = true;
     const model = 'google/gemini-2.5-pro';
     const answers = Array.isArray(body.answers) ? body.answers : [];
+    const pendingGaps = Array.isArray(body.pendingGaps) ? body.pendingGaps : [];
     const missingResponses = Array.isArray(body.missingCheckResponses) ? body.missingCheckResponses : [];
     const recommendationCategories: string[] = Array.isArray(body.recommendationCategories) ? body.recommendationCategories : [];
 
@@ -418,6 +419,9 @@ ${JSON.stringify({
 
 INVESTIGATOR-CONFIRMED ANSWERS (use as ground truth, do not contradict):
 ${JSON.stringify(answers, null, 2)}
+
+PENDING INVESTIGATION GAPS (DO NOT treat as facts; do not use in WHY Tree, key factors, systems, or recommendations):
+${JSON.stringify(pendingGaps, null, 2)}
 
 INVESTIGATOR MISSING-CHECK RESPONSES:
 ${JSON.stringify(missingResponses, null, 2)}
